@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from routes.routes import router
 from chatIA import chat
-from openWA import registrar_webhook_openwa, enviar_mensaje
+from openWA import registrar_webhook_openwa, enviar_mensaje, obtener_informacion_grupo, obtener_informacion_contacto
 import uvicorn
 from config import settings
 
@@ -31,15 +31,28 @@ async def health_check():
 
 estado_conexion_openwa = False
 
+lista_participantes = []
+
 @app.on_event("startup")
 async def startup_event():
     # iniciar el chatbot
-    respuesta = await chat("iniciando... en tu respuesta si es posible di la fecha actual.", "administrador", "")
+    if settings.DEFAULT_GROUP != "":
+        info_grupo = obtener_informacion_grupo(settings.DEFAULT_GROUP)
+        participantes = info_grupo.get("participants", "")
+        if participantes != "":
+            for participante in participantes:
+                datos_participante = obtener_informacion_contacto(participante["id"])
+                lista_participantes.append(datos_participante)
+    if len(lista_participantes) > 0:
+        respuesta = await chat(f"iniciando... en tu respuesta si es posible di la fecha actual y si encuentras participantes del grupo saludalos usando su pushName. Los participantes están en esta lista de Python: {lista_participantes}", "administrador", "")
+    else:
+        respuesta = await chat("iniciando... en tu respuesta si es posible di la fecha actual.", "administrador", "")
     print(f"Respuesta del chatbot al iniciar: {respuesta}")
     if respuesta.get("error") == 'Connection error.':
         print('No se inicializo modelo de IA')
     else:
-        await enviar_mensaje("573212529695-1630356567@g.us", "🔷 Gemma: " + respuesta["response"])
+        if len(lista_participantes) > 0:
+            await enviar_mensaje(settings.DEFAULT_GROUP, "🔷 Gemma: " + respuesta["response"])
     global estado_conexion_openwa
     if not estado_conexion_openwa:
         estado_conexion_openwa = registrar_webhook_openwa(estado_conexion_openwa)

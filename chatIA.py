@@ -205,7 +205,7 @@ async def generar_respuesta_audio_IA(texto, delivery_id, mensaje):
     finally:
         if 'model' in locals() and model is not None:
             # 1. Mover al CPU rompe enlaces residuales en los tensores de la GPU
-            model.cpu()             
+            # model.cpu()             
             # 2. Eliminar el modelo y estructuras asociadas
             del model            
             # 3. Eliminar optimizadores y gradientes (CRUCIAL para liberar memoria)

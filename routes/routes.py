@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 import threading
 from chatIA import chat, generar_respuesta_audio_IA
 from openWA import obtener_informacion_contacto, obtener_informacion_grupo, enviar_mensaje, enviar_mensaje_audio, reaccionar_mensaje
+from database_chatbot import guardar_mensaje, consultar_media_mensaje_citado
 
 load_dotenv(override=True)
 
@@ -46,6 +47,8 @@ async def webhook(request: Request):
         else:
             print(f"Datos del webhook: {data}")
             chat_id = data.get("chatId", "desconocido")
+            if chat_id == "573212529695-1630356567@g.us":
+                guardar_mensaje(chat_id, data)
             id_remitente = data.get("from", "desconocido")
             isGroup = data.get("isGroup", False)
             id_mensaje = data.get("id", None)
@@ -68,9 +71,22 @@ async def webhook(request: Request):
                 print(f"Mensaje recibido: {mensaje}")
                 print(f"Remitente: {remitente}")
 
+                mensaje_citado = data.get("quotedMessage", None)
+
+                if mensaje_citado is not None:
+                    id_citado = mensaje_citado.get("id", None)
+                    body_citado = mensaje_citado.get("id", "")
+
                 if tipo_mensaje == "chat" and "@gemma" in mensaje:
                     print("Procesando mensaje de chat...", id_mensaje)
-                    respuesta = await chat(mensaje, remitente, chat_id)
+                    if body_citado != "" and id_citado is not None:
+                        media_citado = consultar_media_mensaje_citado(chat_id, id_citado)
+                        if media_citado is not None:
+                            respuesta = await chat(mensaje + " " + f"'{body_citado}'", remitente, chat_id, media_citado)
+                        else:
+                            respuesta = await chat(mensaje + " " + f"'{body_citado}'", remitente, chat_id)                            
+                    else:
+                        respuesta = await chat(mensaje, remitente, chat_id)
                     print(f"Respuesta generada: {respuesta}")
                     if respuesta["response"] == "emoji generado":
                         await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
@@ -141,6 +157,8 @@ async def webhook(request: Request):
         else:
             print(f"Datos del webhook: {data}")
             chat_id = data.get("chatId", "desconocido")
+            if chat_id == "573212529695-1630356567@g.us":
+                guardar_mensaje(chat_id, data)
             id_remitente = data.get("from", "desconocido")
             id_destinatario = data.get("to", "desconocido")
             isGroup = data.get("isGroup", False)
@@ -168,9 +186,22 @@ async def webhook(request: Request):
                 print(f"Remitente: {remitente}")
                 print(f"Destinatario: {destinatario}")
 
+                mensaje_citado = data.get("quotedMessage", None)
+
+                if mensaje_citado is not None:
+                    id_citado = mensaje_citado.get("id", None)
+                    body_citado = mensaje_citado.get("id", "")
+
                 if tipo_mensaje == "chat" and "@gemma" in mensaje:
                     print("Procesando mensaje de chat...", id_mensaje)
-                    respuesta = await chat(mensaje, destinatario, chat_id)
+                    if body_citado != "" and id_citado is not None:
+                        media_citado = consultar_media_mensaje_citado(chat_id, id_citado)
+                        if media_citado is not None:
+                            respuesta = await chat(mensaje + " " + f"'{body_citado}'", destinatario, chat_id, media_citado)
+                        else:
+                            respuesta = await chat(mensaje + " " + f"'{body_citado}'", destinatario, chat_id)
+                    else:
+                        respuesta = await chat(mensaje, destinatario, chat_id)
                     print(f"Respuesta generada: {respuesta}")
                     if respuesta["response"] == "emoji generado":
                         await reaccionar_mensaje(id_destinatario, id_mensaje, respuesta["emoji"])
