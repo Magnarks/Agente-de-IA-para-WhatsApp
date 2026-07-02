@@ -17,4 +17,7 @@ def consultar_media_mensaje_citado(id_chat, id_mensaje):
         {"id": id_mensaje}
     )
     for documento in busqueda:
-        return documento["media"]
+        if "media" in documento:
+            return documento["media"]
+        else: 
+            return None

@@ -3,6 +3,75 @@ import json
 from config import settings
 import base64
 
+async def iniciar_sesion_openwa():
+    api_url = f"{settings.OPENWA_BASE_URL}/api/sessions/{settings.OPENWA_SESSION_ID}/start"
+    headers = {
+        "Accept": "*/*",
+        "Authorization": f"Bearer {settings.OPENWA_API_TOKEN}",
+    }
+    try:
+        response = requests.post(api_url, headers=headers)
+        if response.status_code == 200 or response.status_code == 201:
+            print("Sesión iniciada exitosamente.")
+            return True
+        else:
+            if response.status_code == 400:
+                print("La sesión ya está iniciada.")
+                return True
+            print("Error al iniciar la sesión.")
+            return False
+    except requests.exceptions.RequestException as e:
+        print(f"Error en la solicitud: {e}")
+        return False
+    
+async def detener_sesion_openwa():
+    api_url = f"{settings.OPENWA_BASE_URL}/api/sessions/{settings.OPENWA_SESSION_ID}/stop"
+    headers = {
+        "Accept": "*/*",
+        "Authorization": f"Bearer {settings.OPENWA_API_TOKEN}",
+    }
+    try:
+        response = requests.post(api_url, headers=headers)
+        if response.status_code == 200 or response.status_code == 201:
+            print("Sesión detenida exitosamente.")
+            return True
+        else:
+            if response.status_code == 400:
+                print("La sesión ya está detenida.")
+                return True
+            print("Error al detener la sesión.")
+            return False
+    except requests.exceptions.RequestException as e:
+        print(f"Error en la solicitud: {e}")
+        return False
+    
+async def estado_sesion_openwa():
+    api_url = f"{settings.OPENWA_BASE_URL}/api/sessions/{settings.OPENWA_SESSION_ID}"
+    headers = {
+        "Accept": "*/*",
+        "Authorization": f"Bearer {settings.OPENWA_API_TOKEN}",
+    }
+    try:
+        response = requests.get(api_url, headers=headers)
+        if response.status_code == 200 or response.status_code == 201:
+            print("Sesión activa.")
+            respuesta = response.json()
+            if respuesta.get("status") == "ready":
+                print("Sesión conectada.")
+                return respuesta.get("status")
+            else:
+                print(f"Sesión no conectada. Estado: {respuesta.get('status')}")
+                return respuesta.get("status")
+        else:
+            if response.status_code == 400:
+                print("La sesión no está activa.")
+                return True
+            print("Error al obtener el estado de la sesión.")
+            return False
+    except requests.exceptions.RequestException as e:
+        print(f"Error en la solicitud: {e}")
+        return False
+
 def _get_registered_webhooks():
     api_url = f"{settings.OPENWA_BASE_URL}/api/sessions/{settings.OPENWA_SESSION_ID}/webhooks"
     headers = {
@@ -39,7 +108,7 @@ def registrar_webhook_openwa(estado_conexion_openwa):
     }
     parametros = {
         "url": settings.OPENWA_WEBHOOK_URL,
-        "events":  ["message.sent","message.received","session.connected", "session.disconnected"],
+        "events":  ["message.sent","message.received","session.connected", "session.disconnected", "session.qr", "*"],
         "secret": "215f628d-210d-47ed-9f5a-44a7e2781f01",
         "headers": {
             "X-Custom-Header": "value"

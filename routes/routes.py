@@ -1,11 +1,9 @@
 from fastapi import APIRouter, Request, HTTPException
-from dotenv import load_dotenv
+from config import settings
 import threading
 from chatIA import chat, generar_respuesta_audio_IA
 from openWA import obtener_informacion_contacto, obtener_informacion_grupo, enviar_mensaje, enviar_mensaje_audio, reaccionar_mensaje
 from database_chatbot import guardar_mensaje, consultar_media_mensaje_citado
-
-load_dotenv(override=True)
 
 # Caché para deduplicar eventos de webhook (message.id)
 processed_deliveries = set()
@@ -47,7 +45,7 @@ async def webhook(request: Request):
         else:
             print(f"Datos del webhook: {data}")
             chat_id = data.get("chatId", "desconocido")
-            if chat_id == "573212529695-1630356567@g.us":
+            if chat_id == settings.DEFAULT_GROUP:
                 guardar_mensaje(chat_id, data)
             id_remitente = data.get("from", "desconocido")
             isGroup = data.get("isGroup", False)
@@ -75,7 +73,10 @@ async def webhook(request: Request):
 
                 if mensaje_citado is not None:
                     id_citado = mensaje_citado.get("id", None)
-                    body_citado = mensaje_citado.get("id", "")
+                    body_citado = mensaje_citado.get("body", "")
+                else:
+                    id_citado = None
+                    body_citado = ""
 
                 if tipo_mensaje == "chat" and "@gemma" in mensaje:
                     print("Procesando mensaje de chat...", id_mensaje)
@@ -157,7 +158,7 @@ async def webhook(request: Request):
         else:
             print(f"Datos del webhook: {data}")
             chat_id = data.get("chatId", "desconocido")
-            if chat_id == "573212529695-1630356567@g.us":
+            if chat_id == settings.DEFAULT_GROUP:
                 guardar_mensaje(chat_id, data)
             id_remitente = data.get("from", "desconocido")
             id_destinatario = data.get("to", "desconocido")
@@ -190,7 +191,10 @@ async def webhook(request: Request):
 
                 if mensaje_citado is not None:
                     id_citado = mensaje_citado.get("id", None)
-                    body_citado = mensaje_citado.get("id", "")
+                    body_citado = mensaje_citado.get("body", "")
+                else:
+                    id_citado = None
+                    body_citado = ""
 
                 if tipo_mensaje == "chat" and "@gemma" in mensaje:
                     print("Procesando mensaje de chat...", id_mensaje)

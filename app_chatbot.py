@@ -1,16 +1,84 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from contextlib import asynccontextmanager
 from routes.routes import router
 from chatIA import chat
-from openWA import registrar_webhook_openwa, enviar_mensaje, obtener_informacion_grupo, obtener_informacion_contacto
+from openWA import registrar_webhook_openwa, enviar_mensaje, obtener_informacion_grupo, obtener_informacion_contacto, iniciar_sesion_openwa, detener_sesion_openwa, estado_sesion_openwa
 import uvicorn
 from config import settings
+import asyncio
+
+estado_conexion_openwa = False
+
+lista_participantes = []
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    MAX_INTENTOS = 10
+    ESPERA_SEGUNDOS = 3
+
+    # iniciar el chatbot
+    sesion_iniciada = await iniciar_sesion_openwa()
+    sesion_realizada = None  # valor por defecto seguro
+    if sesion_iniciada:
+        for intento in range(1, MAX_INTENTOS + 1):
+            try:
+                sesion_realizada = await estado_sesion_openwa()
+                if sesion_realizada == "ready":
+                    print(f"Sesión de OpenWA lista. Estado: {sesion_realizada}")
+                    break
+                print(f"Estado actual: {sesion_realizada}. Reintentando... ({intento}/{MAX_INTENTOS})")
+                await asyncio.sleep(ESPERA_SEGUNDOS)
+            except Exception as e:
+                print(f"Error al verificar el estado: {e}")
+                await asyncio.sleep(ESPERA_SEGUNDOS)
+        else:
+            print("No se pudo establecer la sesión de OpenWA tras varios intentos.")
+    else:
+        print("No se pudo iniciar sesión en OpenWA.")
+
+    # iniciar webhook openWA
+    global estado_conexion_openwa
+    if not estado_conexion_openwa:
+        if sesion_realizada == "ready":
+            estado_conexion_openwa = registrar_webhook_openwa(estado_conexion_openwa)
+        else:
+            print("No se pudo iniciar sesión en OpenWA. Verifica que la sesión esté activa.")
+
+    if settings.DEFAULT_GROUP != "" and sesion_realizada == "ready":
+        info_grupo = obtener_informacion_grupo(settings.DEFAULT_GROUP)
+        participantes = info_grupo.get("participants", "")
+        if participantes != "":
+            for participante in participantes:
+                datos_participante = obtener_informacion_contacto(participante["id"])
+                lista_participantes.append(datos_participante)
+    if len(lista_participantes) > 0 and sesion_realizada == "ready":
+        respuesta = await chat(f"iniciando... en tu respuesta si es posible di la fecha actual y si encuentras participantes del grupo saludalos usando su pushName y según la hora en el saludo menciona buenos días, buenas tardes o buenas noches. Los participantes están en esta lista de Python: {lista_participantes}", "administrador", "")
+    else:
+        respuesta = await chat("iniciando... en tu respuesta si es posible di la fecha actual.", "administrador", "")
+    print(f"Respuesta del chatbot al iniciar: {respuesta}")
+    if respuesta.get("error") == 'Connection error.':
+        print('No se inicializo modelo de IA')
+    else:
+        if len(lista_participantes) > 0 and sesion_realizada == "ready":
+            await enviar_mensaje(settings.DEFAULT_GROUP, "🔷 Gemma: " + respuesta["response"])
+        else:
+            print("No se pudo enviar el mensaje. Verifica que la sesión esté activa.")
+        # El yield marca la transición entre startup y shutdown
+    yield
+    # SHUTDOWN - código después del yield (aquí limpieza si es necesaria)
+    print("Cerrando aplicación...")
+    if estado_conexion_openwa and sesion_realizada == "ready":
+        await detener_sesion_openwa()
+        estado_conexion_openwa = False
+        print("Sesión de OpenWA detenida.")
 
 app = FastAPI(
     title="Chatbot API",
     description="API para el chatbot de Whatsapp",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 app.add_middleware(
@@ -28,34 +96,6 @@ app.mount("/audios", StaticFiles(directory=settings.RUTA_AUDIOS), name="audios")
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
-
-estado_conexion_openwa = False
-
-lista_participantes = []
-
-@app.on_event("startup")
-async def startup_event():
-    # iniciar el chatbot
-    if settings.DEFAULT_GROUP != "":
-        info_grupo = obtener_informacion_grupo(settings.DEFAULT_GROUP)
-        participantes = info_grupo.get("participants", "")
-        if participantes != "":
-            for participante in participantes:
-                datos_participante = obtener_informacion_contacto(participante["id"])
-                lista_participantes.append(datos_participante)
-    if len(lista_participantes) > 0:
-        respuesta = await chat(f"iniciando... en tu respuesta si es posible di la fecha actual y si encuentras participantes del grupo saludalos usando su pushName. Los participantes están en esta lista de Python: {lista_participantes}", "administrador", "")
-    else:
-        respuesta = await chat("iniciando... en tu respuesta si es posible di la fecha actual.", "administrador", "")
-    print(f"Respuesta del chatbot al iniciar: {respuesta}")
-    if respuesta.get("error") == 'Connection error.':
-        print('No se inicializo modelo de IA')
-    else:
-        if len(lista_participantes) > 0:
-            await enviar_mensaje(settings.DEFAULT_GROUP, "🔷 Gemma: " + respuesta["response"])
-    global estado_conexion_openwa
-    if not estado_conexion_openwa:
-        estado_conexion_openwa = registrar_webhook_openwa(estado_conexion_openwa)
 
 if __name__ == "__main__":
     uvicorn.run("app_chatbot:app", port=8000, reload=True)
