@@ -7,7 +7,8 @@ import os
 import subprocess
 import base64
 from tavily import TavilyClient, TavilyKeylessLimitError
-from openWA import obtener_historial_mensajes
+from database_chatbot import consultar_mensajes, consultar_memorias
+from generador_imagenes import generar_imagen
 import whisper
 import tempfile
 from datetime import datetime
@@ -16,6 +17,8 @@ from omnivoice import OmniVoice
 import soundfile as sf
 import torch
 import gc
+import uuid
+import re
 
 load_dotenv(override=True)
 
@@ -26,17 +29,62 @@ SYSTEM_MESSAGE = settings.SYSTEM_MESSAGE
 
 historial_conversacion = {}
 
-fecha_actual = datetime.now().strftime("%d/%m/%Y")
+fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-async def generar_resumen_IA(id_chat: str, numero_mensajes: int, paginacion = 1):
+
+async def guardar_memoria_IA(remitente: str, id_remitente: str, memoria: str):
+    from database_chatbot import guardar_memoria
+    resultado = guardar_memoria(remitente, id_remitente, memoria)
+    print(f"Memoria guardada para {remitente} ({id_remitente}): {memoria}")
+    return resultado
+
+async def generar_resumen_IA(id_chat: str, numero_mensajes: int):
     if id_chat != "":
-        resumen = await obtener_historial_mensajes(id_chat, numero_mensajes, paginacion)
+        resumen = consultar_mensajes(id_chat, numero_mensajes)
         print("Resumen del chat obtenido: ", resumen)
         return resumen
     
 async def generar_reaccion_IA(emoji: str):
-    print("Emoji generado:", emoji)
-    return emoji
+    single_emoji = emoji.strip().split()[0] if emoji.strip() else "👍"
+    print("Emoji generado:", single_emoji)
+    return single_emoji
+
+async def pedir_imagen_IA(peticion: str):
+    imagen_pedida = generar_imagen(peticion)
+    print("Imagen pedida:", imagen_pedida)
+    return imagen_pedida
+
+def limpiar_tool_calls_texto(contenido: str, reaccion_emoji=None):
+    """Elimina patrones de tool calls filtrados como texto y extrae emojis de generar_reaccion_IA."""
+    if not contenido:
+        return contenido, reaccion_emoji
+
+    emoji = reaccion_emoji
+
+    # Extraer emoji de generar_reaccion_IA en cualquier formato conocido
+    patrones_emoji = [
+        r'<\|tool_call>call:generar_reaccion_IA\{emoji:"([^"]+)"\}<tool_call\|>',
+        r'\[Tool call: generar_reaccion_IA\(emoji=["\']?([^\'"\)\]]+)["\']?\)\]',
+        r'<tool_call>\s*generar_reaccion_IA[^<]*emoji["\s:=]+([^\s"\'<,}\]]+)',
+    ]
+    for patron in patrones_emoji:
+        match = re.search(patron, contenido, flags=re.DOTALL | re.IGNORECASE)
+        if match and not emoji:
+            raw = match.group(1).strip()
+            emoji = raw.split()[0] if raw else "👍"
+            break
+
+    # Eliminar todos los patrones conocidos de tool calls
+    for patron in [
+        r'<\|tool_call>.*?<tool_call\|>',
+        r'\[Tool call:.*?\]',
+        r'<tool_call>.*?</tool_call>',
+        r'<function_calls>.*?</function_calls>',
+        r'\{[^{}]*["\']?action["\']?\s*:\s*["\'][^"\']+["\'][^{}]*\}',
+    ]:
+        contenido = re.sub(patron, '', contenido, flags=re.DOTALL | re.IGNORECASE)
+
+    return contenido.strip(), emoji
 
 def consultar_internet_IA(buscar: str):
 
@@ -148,9 +196,9 @@ async def transcribir_con_whisper_local(wav_bytes):
     finally:
         os.remove(tmp_path)
 
-async def generar_respuesta_audio_IA(texto, delivery_id, mensaje):
+async def generar_respuesta_audio_IA(texto, delivery_id, tipo_voz="masculina"):
     try:
-        if "femenina" in mensaje:
+        if tipo_voz == "femenina":
             voz = settings.VOZ_FEMENINIA
             texto_voz = settings.TEXTO_VOZ_FEMENINA
         else:
@@ -239,13 +287,9 @@ herramientas = [
                     "numero_mensajes": {
                         "type": "integer",
                         "description": "El número maximo de mensajes a retornar."
-                    },
-                    "paginacion": {
-                        "type": "integer",
-                        "description": "Desplazamiento para paginación."
                     }
                 },
-                "required": ["numero_mensajes", "paginacion"]
+                "required": ["numero_mensajes"]
             }
         }
     },
@@ -253,7 +297,7 @@ herramientas = [
         "type": "function",
         "function": {
             "name": "consultar_internet_IA",
-            "description": "Busca información actualizada en internet. Debe utilizarse para noticias, eventos recientes, lanzamientos de productos, cambios de versiones, resultados deportivos, clima y cualquier información que pueda haber cambiado después del entrenamiento del modelo.",
+            "description": "Busca información actualizada en internet. Debe utilizarse para noticias, eventos recientes, lanzamientos de productos, cambios de versiones, resultados deportivos, clima y cualquier información que pueda haber cambiado después del entrenamiento del modelo. Si el usuario pregunta por una canción o letra de canción, si en la respuesta encuentras un enlace de YouTube, Spotify o Deezer, devuelvelo en la respuesta. No utilizar para resultados de partidos en vivo.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -305,23 +349,18 @@ herramientas = [
         "function": {
             "name": "generar_reaccion_IA",
             "description": """
-                Utiliza esta herramienta cuando una reacción con emoji sea suficiente.
+                Siempre usa esta herramienta para reaccionar a cada mensaje con UN único emoji apropiado.
+                La reacción SIEMPRE va acompañada de una respuesta en texto o audio.
+                Solo retorna UN único emoji, nunca combines múltiples emojis.
 
                 Ejemplos:
-                - "jajaja"
-                - "xd"
-                - "😂"
-                - "buen trabajo"
-                - "felicidades"
-                - "golazo"
-                - "que tristeza"
-                - "brutal"
-                - "increíble"
-
-                Si el mensaje puede ser respondido únicamente con un emoji,
-                usa esta herramienta EN LUGAR de generar texto.
-
-                Cuando uses esta herramienta NO escribas una respuesta adicional.
+                - "jajaja" → 😂
+                - "buen trabajo" → 👏
+                - "felicidades" → 🎉
+                - "golazo" → ⚽
+                - "que tristeza" → 😢
+                - pregunta técnica → 🤔
+                - respuesta general → 👍
                 """,
             "parameters": {
             "type": "object",
@@ -334,16 +373,81 @@ herramientas = [
             "required": ["emoji"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "generar_respuesta_audio_IA",
+            "description": "Genera una respuesta en audio (nota de voz). Utilizar cuando el usuario solicite una respuesta en audio, nota de voz, mensaje hablado, que le hablen, en voz o cualquier forma de respuesta hablada.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "texto": {
+                        "type": "string",
+                        "description": "El texto que se desea convertir en audio."
+                    },
+                    "tipo_voz": {
+                        "type": "string",
+                        "enum": ["femenina", "masculina"],
+                        "description": "El tipo de voz a utilizar. Por defecto masculina."
+                    }
+                },
+                "required": ["texto"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "guardar_memoria_IA",
+            "description": "Utiliza esta herramienta para guardar información importante que deba ser recordada en el futuro. Por ejemplo, si el usuario te dice su nombre, su cumpleaños, su dirección, su número de teléfono o cualquier otro dato personal que pueda ser útil recordar más adelante.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "memoria": {
+                        "type": "string",
+                        "description": "La información que se desea guardar en la memoria."
+                    }
+                },
+                "required": ["memoria"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "pedir_imagen_IA",
+            "description": "Genera una imagen basada en la descripción proporcionada por el usuario. Utilizar cuando el usuario solicite una imagen, foto, ilustración, dibujo, arte o cualquier representación visual.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "peticion": {
+                        "type": "string",
+                        "description": "La petición o descripción de la imagen que se desea generar."
+                    }
+                },
+                "required": ["peticion"]
+            }
+        }
     }
 ]
 
-async def chat(mensaje, remitente, chat_id, b64 = None):
+async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delivery_id=None):
     usuario = remitente
+    id_usuario = id_remitente_grupo
 
     if usuario not in historial_conversacion:
         historial_conversacion[usuario] = []
         historial_conversacion[usuario].append({"role": "system", "content": SYSTEM_MESSAGE})
         historial_conversacion[usuario].append({"role": "system", "content": f"Fecha actual: {fecha_actual}"})
+        # Cargar memorias previas del usuario
+        memorias_previas = consultar_memorias(usuario, id_usuario)
+        if memorias_previas:
+            contenido_memorias = "\n".join([f"- [{m['fecha']}] {m['memoria']}" for m in memorias_previas])
+            historial_conversacion[usuario].append({
+                "role": "system",
+                "content": f"Memorias del usuario almacenadas:\n{contenido_memorias}"
+            })
 
     if b64 is None:
         historial_conversacion[usuario].append({"role": "user", "content": mensaje})
@@ -417,6 +521,7 @@ async def chat(mensaje, remitente, chat_id, b64 = None):
                 ]
             })
 
+            reaccion_emoji = None
             for tool_call in response.choices[0].message.tool_calls:
                 tool_name = tool_call.function.name
                 tool_args = json.loads(tool_call.function.arguments)
@@ -424,35 +529,153 @@ async def chat(mensaje, remitente, chat_id, b64 = None):
                 print(f"Ejecutando herramienta: {tool_name} con args: {tool_args}")
 
                 if tool_name == "generar_resumen_IA":
-                    resultado = await generar_resumen_IA(chat_id, tool_args.get("cantidad mensajes"), tool_args.get("paginacion"))
+                    resultado = await generar_resumen_IA(chat_id, tool_args.get("cantidad mensajes"))
+                elif tool_name == "generar_respuesta_audio_IA":
+                    texto_audio = tool_args.get("texto")
+                    tipo_voz = tool_args.get("tipo_voz", "masculina")
+                    _delivery_id = delivery_id or str(uuid.uuid4())
+                    resultado_audio = await generar_respuesta_audio_IA(texto_audio, _delivery_id, tipo_voz)
+                    if "audio_file" in resultado_audio:
+                        response_data = {"response": "audio generado", "audio_file": resultado_audio["audio_file"]}
+                        if reaccion_emoji:
+                            response_data["emoji"] = reaccion_emoji
+                        return response_data
+                    resultado = resultado_audio
+                elif tool_name == "guardar_memoria_IA":
+                    resultado = await guardar_memoria_IA(usuario, id_usuario, tool_args.get("memoria"))
                 elif tool_name == "consultar_internet_IA":
                     resultado = consultar_internet_IA(tool_args.get("buscar"))
                 elif tool_name == "consultar_resultado_deportivo_IA":
                     resultado = consultar_resultado_deportivo_IA(tool_args.get("buscar"))
+                    if isinstance(resultado, dict) and not resultado.get("data"):
+                        resultado = "No se encontraron resultados de partidos para este período. Responde al usuario basándote en tu conocimiento general."
                 elif tool_name == "consultar_partido_deportivo_en_vivo_IA":
                     resultado = consultar_partido_deportivo_en_vivo_IA(tool_args.get("buscar"))
+                    if isinstance(resultado, dict) and not resultado.get("response"):
+                        resultado = "No hay partidos en vivo disponibles en este momento según la API. Proporciona al usuario tu pronóstico o análisis basado en tu conocimiento general de los equipos."
                 elif tool_name == "generar_reaccion_IA":
-                    resultado = await generar_reaccion_IA(tool_args.get("emoji"))
-                    return {"response": "emoji generado", "emoji": resultado}
+                    reaccion_emoji = await generar_reaccion_IA(tool_args.get("emoji"))
+                    resultado = {"emoji": reaccion_emoji}
+                elif tool_name == "pedir_imagen_IA":
+                    resultado_imagen = await pedir_imagen_IA(tool_args.get("peticion"))
+                    if "artifacts" in resultado_imagen:
+                            response_data = {"response": "imagen generada", "image_file": resultado_imagen["artifacts"][0]["base64"]}
+                            if reaccion_emoji:
+                                response_data["emoji"] = reaccion_emoji
+                            return response_data
+                    resultado = resultado_imagen
                 else:
                     resultado = "Función no reconocida"
 
                 historial_conversacion[usuario].append({
                     "role": "tool",
-                    # "tool_call_id": tool_call.id,
+                    "tool_call_id": tool_call.id,
                     "content": f"Resultado de {tool_name}: {json.dumps(resultado, default=str)}"
                 })
 
             final_response = client.chat.completions.create(
                 model=MODEL_NAME,
-                messages=historial_conversacion[usuario]
+                messages=historial_conversacion[usuario],
+                tools=herramientas
             )
 
-            contenido = final_response.choices[0].message.content or ""
+            # Si final_response también tiene tool_calls (ej: generar_reaccion_IA)
+            if final_response.choices[0].message.tool_calls:
+                historial_conversacion[usuario].append({
+                    "role": "assistant",
+                    "content": final_response.choices[0].message.content,
+                    "tool_calls": [
+                        {
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {"name": tc.function.name, "arguments": tc.function.arguments}
+                        }
+                        for tc in final_response.choices[0].message.tool_calls
+                    ]
+                })
+                for tc in final_response.choices[0].message.tool_calls:
+                    tc_args = json.loads(tc.function.arguments)
+                    if tc.function.name == "generar_reaccion_IA" and not reaccion_emoji:
+                        reaccion_emoji = await generar_reaccion_IA(tc_args.get("emoji"))
+                        tc_resultado = {"emoji": reaccion_emoji}
+                    elif tc.function.name == "pedir_imagen_IA":
+                        tc_resultado = await pedir_imagen_IA(tc_args.get("peticion"))
+                        if "artifacts" in tc_resultado:
+                            response_data = {"response": "imagen generada", "image_file": tc_resultado["artifacts"][0]["base64"]}
+                            if reaccion_emoji:
+                                response_data["emoji"] = reaccion_emoji
+                            return response_data
+                    elif tc.function.name == "consultar_internet_IA":
+                        tc_resultado = consultar_internet_IA(tc_args.get("buscar"))
+                    elif tc.function.name == "guardar_memoria_IA":
+                        tc_resultado = await guardar_memoria_IA(usuario, id_usuario, tc_args.get("memoria"))
+                    elif tc.function.name == "generar_respuesta_audio_IA":
+                        _did = delivery_id or str(uuid.uuid4())
+                        tc_resultado = await generar_respuesta_audio_IA(tc_args.get("texto"), _did, tc_args.get("tipo_voz", "masculina"))
+                        if "audio_file" in tc_resultado:
+                            response_data = {"response": "audio generado", "audio_file": tc_resultado["audio_file"]}
+                            if reaccion_emoji:
+                                response_data["emoji"] = reaccion_emoji
+                            return response_data
+                    else:
+                        tc_resultado = "ok"
+                    historial_conversacion[usuario].append({
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": json.dumps(tc_resultado, default=str)
+                    })
+                # Llamada final sin tools para obtener el texto
+                text_response = client.chat.completions.create(
+                    model=MODEL_NAME,
+                    messages=historial_conversacion[usuario],
+                    tool_choice="none"
+                )
+                contenido = text_response.choices[0].message.content or ""
+                contenido, reaccion_emoji = limpiar_tool_calls_texto(contenido, reaccion_emoji)
+            else:
+                contenido = final_response.choices[0].message.content or ""
+            contenido, reaccion_emoji = limpiar_tool_calls_texto(contenido, reaccion_emoji)
+
+            # Detectar pedir_imagen_IA si el modelo la llamó como texto en lugar de function call
+            if 'pedir_imagen_IA' in contenido:
+                match_peticion = re.search(r'["\']peticion["\']?\s*:\s*["\']([^"\']+)["\']', contenido, re.IGNORECASE)
+                if match_peticion:
+                    prompt_imagen = match_peticion.group(1)
+                    print(f"[INFO] pedir_imagen_IA detectada como texto, ejecutando con: {prompt_imagen}")
+                    resultado_img_txt = await pedir_imagen_IA(prompt_imagen)
+                    if isinstance(resultado_img_txt, dict) and "artifacts" in resultado_img_txt:
+                        rdata = {"response": "imagen generada", "image_file": resultado_img_txt["artifacts"][0]["base64"]}
+                        if reaccion_emoji:
+                            rdata["emoji"] = reaccion_emoji
+                        historial_conversacion[usuario].append({"role": "assistant", "content": "Imagen generada"})
+                        return rdata
+                    contenido = re.sub(r'\{[^{}]*pedir_imagen_IA[^{}]*\}', '', contenido, flags=re.DOTALL | re.IGNORECASE).strip()
+
+            # Fallback si el modelo retornó contenido vacío tras procesar tools
+            if not contenido:
+                print("[WARN] Contenido vacío tras procesar tools, llamada de fallback sin historial de tools")
+                mensajes_sin_tools = [
+                    m for m in historial_conversacion[usuario]
+                    if m.get("role") not in ("tool",) and "tool_calls" not in m
+                ]
+                try:
+                    fallback_resp = client.chat.completions.create(
+                        model=MODEL_NAME,
+                        messages=mensajes_sin_tools
+                    )
+                    contenido = fallback_resp.choices[0].message.content or ""
+                    contenido, reaccion_emoji = limpiar_tool_calls_texto(contenido, reaccion_emoji)
+                except Exception as fe:
+                    print(f"[WARN] Error en fallback: {fe}")
+
             historial_conversacion[usuario].append({"role": "assistant", "content": contenido})
-            return {"response": contenido}
+            response_data = {"response": contenido}
+            if reaccion_emoji:
+                response_data["emoji"] = reaccion_emoji
+            return response_data
         
         contenido = response.choices[0].message.content or ""
+        contenido, _ = limpiar_tool_calls_texto(contenido)
         historial_conversacion[usuario].append({"role": "assistant", "content": contenido})
         return {"response": contenido}
     except Exception as e:

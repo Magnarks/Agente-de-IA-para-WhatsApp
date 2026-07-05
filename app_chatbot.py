@@ -54,9 +54,9 @@ async def lifespan(app: FastAPI):
                 datos_participante = obtener_informacion_contacto(participante["id"])
                 lista_participantes.append(datos_participante)
     if len(lista_participantes) > 0 and sesion_realizada == "ready":
-        respuesta = await chat(f"iniciando... en tu respuesta si es posible di la fecha actual y si encuentras participantes del grupo saludalos usando su pushName y según la hora en el saludo menciona buenos días, buenas tardes o buenas noches. Los participantes están en esta lista de Python: {lista_participantes}", "administrador", "")
+        respuesta = await chat(f"iniciando... en tu respuesta si es posible di la fecha actual y si encuentras participantes del grupo saludalos usando su pushName y según la hora en el saludo menciona buenos días, buenas tardes o buenas noches. Los participantes están en esta lista de Python: {lista_participantes}", "administrador", "", "")
     else:
-        respuesta = await chat("iniciando... en tu respuesta si es posible di la fecha actual.", "administrador", "")
+        respuesta = await chat("iniciando... en tu respuesta si es posible di la fecha actual.", "administrador", "", "")
     print(f"Respuesta del chatbot al iniciar: {respuesta}")
     if respuesta.get("error") == 'Connection error.':
         print('No se inicializo modelo de IA')
@@ -70,9 +70,23 @@ async def lifespan(app: FastAPI):
     # SHUTDOWN - código después del yield (aquí limpieza si es necesaria)
     print("Cerrando aplicación...")
     if estado_conexion_openwa and sesion_realizada == "ready":
-        await detener_sesion_openwa()
-        estado_conexion_openwa = False
-        print("Sesión de OpenWA detenida.")
+        if len(lista_participantes) > 0 and sesion_realizada == "ready":
+            respuesta = await chat(f"Apagando... si encuentras participantes del grupo despídete usando su pushName y según la hora en la que se encuentren menciona buenos días, buenas tardes o buenas noches. Los participantes están en esta lista de Python: {lista_participantes}", "administrador", "", "")
+        else:
+            respuesta = await chat("Apagando... genera una respuesta de despedida.", "administrador", "", "")
+        if respuesta.get("error") == 'Connection error.':
+            await enviar_mensaje(settings.DEFAULT_GROUP, "🔷 Gemma: " + "Gemma Apagada...")  
+            await asyncio.sleep(ESPERA_SEGUNDOS)
+            await detener_sesion_openwa()
+            estado_conexion_openwa = False
+            print("Sesión de OpenWA detenida.")  
+        else:
+            if len(lista_participantes) > 0 and sesion_realizada == "ready":
+                await enviar_mensaje(settings.DEFAULT_GROUP, "🔷 Gemma: " + respuesta["response"])    
+                await asyncio.sleep(ESPERA_SEGUNDOS)
+                await detener_sesion_openwa()
+                estado_conexion_openwa = False
+                print("Sesión de OpenWA detenida.")
 
 app = FastAPI(
     title="Chatbot API",

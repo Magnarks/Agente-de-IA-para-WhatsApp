@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Request, HTTPException
 from config import settings
 import threading
-from chatIA import chat, generar_respuesta_audio_IA
-from openWA import obtener_informacion_contacto, obtener_informacion_grupo, enviar_mensaje, enviar_mensaje_audio, reaccionar_mensaje
+from chatIA import chat
+from openWA import obtener_informacion_contacto, obtener_informacion_grupo, enviar_mensaje, enviar_mensaje_audio, reaccionar_mensaje, enviar_mensaje_imagen
 from database_chatbot import guardar_mensaje, consultar_media_mensaje_citado
 
 # Caché para deduplicar eventos de webhook (message.id)
@@ -64,7 +64,7 @@ async def webhook(request: Request):
                     print(f"Información del contacto en grupo: {info_contacto}")
                 mensaje = data.get("body", "")
                 tipo_mensaje = data.get("type", "desconocido")
-                remitente = info_contacto.get("pushName", "name")
+                remitente = info_contacto.get("name", "pushName")
                 print(f"Tipo de mensaje: {tipo_mensaje}")
                 print(f"Mensaje recibido: {mensaje}")
                 print(f"Remitente: {remitente}")
@@ -78,28 +78,26 @@ async def webhook(request: Request):
                     id_citado = None
                     body_citado = ""
 
-                if tipo_mensaje == "chat" and "@gemma" in mensaje:
+                if tipo_mensaje == "text" and "@gemma" in mensaje:
                     print("Procesando mensaje de chat...", id_mensaje)
+                    delivery_id = payload.get("deliveryId")
                     if body_citado != "" and id_citado is not None:
                         media_citado = consultar_media_mensaje_citado(chat_id, id_citado)
                         if media_citado is not None:
-                            respuesta = await chat(mensaje + " " + f"'{body_citado}'", remitente, chat_id, media_citado)
+                            respuesta = await chat(mensaje + " " + f"'{body_citado}'", remitente, id_remitente_grupo, chat_id, media_citado, delivery_id=delivery_id)
                         else:
-                            respuesta = await chat(mensaje + " " + f"'{body_citado}'", remitente, chat_id)                            
+                            respuesta = await chat(mensaje + " " + f"'{body_citado}'", remitente, id_remitente_grupo, chat_id, delivery_id=delivery_id)                            
                     else:
-                        respuesta = await chat(mensaje, remitente, chat_id)
+                        respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, delivery_id=delivery_id)
                     print(f"Respuesta generada: {respuesta}")
-                    if respuesta["response"] == "emoji generado":
+                    if "emoji" in respuesta and id_mensaje:
                         await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
-                        return {"status": "ok","response": respuesta}    
-                    if "audio" in mensaje:
-                        print("Generando respuesta de audio...")
-                        respuesta_audio = await generar_respuesta_audio_IA(respuesta["response"], payload.get("deliveryId"), mensaje)
-                        print(f"Respuesta de audio generada: {respuesta_audio}")
-                        if "audio_file" in respuesta_audio:
-                            await enviar_mensaje_audio(chat_id, respuesta_audio['audio_file'])
-                        else:
-                            await enviar_mensaje(chat_id, "🔷 Gemma: " + "No se pudo generar la respuesta de audio.", id_mensaje)
+                    if respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
+                        await enviar_mensaje_audio(chat_id, respuesta["audio_file"])
+                    elif respuesta.get("response") == "audio generado":
+                        await enviar_mensaje(chat_id, "🔷 Gemma: No se pudo generar la respuesta de audio.", id_mensaje)
+                    elif respuesta.get("response") == "imagen generada" and "image_file" in respuesta:
+                        await enviar_mensaje_imagen(chat_id, respuesta["image_file"])
                     else:
                         await enviar_mensaje(chat_id, "🔷 Gemma: " + respuesta["response"], id_mensaje)
                     return {
@@ -110,19 +108,14 @@ async def webhook(request: Request):
                     media = data.get("media", None)
                     if media is not None:
                         print("Procesando mensaje de chat...", id_mensaje)
-                        respuesta = await chat(mensaje, remitente, chat_id, media)
+                        respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, media, delivery_id=payload.get("deliveryId"))
                         print(f"Respuesta generada: {respuesta}")
-                        if respuesta["response"] == "emoji generado":
+                        if "emoji" in respuesta and id_mensaje:
                             await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
-                            return {"status": "ok","response": respuesta}    
-                        if "audio" in mensaje:
-                            print("Generando respuesta de audio...")
-                            respuesta_audio = await generar_respuesta_audio_IA(respuesta["response"], payload.get("deliveryId"), mensaje)
-                            print(f"Respuesta de audio generada: {respuesta_audio}")
-                            if "audio_file" in respuesta_audio:
-                                await enviar_mensaje_audio(chat_id, respuesta_audio['audio_file'])
-                            else:
-                                await enviar_mensaje(chat_id, "No se pudo generar la respuesta de audio.", id_mensaje)
+                        if respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
+                            await enviar_mensaje_audio(chat_id, respuesta["audio_file"])
+                        elif respuesta.get("response") == "audio generado":
+                            await enviar_mensaje(chat_id, "🔷 Gemma: No se pudo generar la respuesta de audio.", id_mensaje)
                         else:
                             await enviar_mensaje(chat_id, "🔷 Gemma: " + respuesta["response"], id_mensaje)
                         return {
@@ -131,20 +124,18 @@ async def webhook(request: Request):
                         }
                     else:
                         return {"status": "error", "message": "No se pudo obtener los medios del mensaje."}     
-                elif tipo_mensaje == "ptt":
+                elif tipo_mensaje == "ptt" or tipo_mensaje == "audio":
                     media = data.get("media", None)
                     if media is not None:
                         print("Procesando mensaje de voz...")
-                        respuesta = await chat(mensaje, remitente, chat_id, media)
+                        respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, media, delivery_id=payload.get("deliveryId"))
                         print(f"Respuesta generada: {respuesta}")
-                        if respuesta["response"] == "emoji generado":
-                            await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
-                            return {"status": "ok","response": respuesta} 
                         if respuesta["response"] == "IGNORAR_AUDIO":
                             return {"status": "error", "message": "No se llamo a gemma en el mensaje."}
-                        else:
-                            if respuesta["response"] != "No se pudo obtener el tipo de archivo.":
-                                await enviar_mensaje(chat_id, "🔷 Gemma: " + respuesta["response"], id_mensaje)
+                        if "emoji" in respuesta and id_mensaje:
+                            await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
+                        if respuesta["response"] != "No se pudo obtener el tipo de archivo.":
+                            await enviar_mensaje(chat_id, "🔷 Gemma: " + respuesta["response"], id_mensaje)
                     else:
                         return {"status": "error", "message": "No se pudo obtener los medios del mensaje."}                    
             else:
@@ -171,7 +162,7 @@ async def webhook(request: Request):
                 print(f"Información del contacto: {info_contacto}")
                 print(f" información del destinatario: {info_contacto_destinatario}")
                 if isGroup:
-                    info_grupo = obtener_informacion_grupo(id_remitente)
+                    info_grupo = obtener_informacion_grupo(id_destinatario)
                     print(f"Información del grupo: {info_grupo}")
                     id_remitente_grupo = data.get("id", "desconocido")
                     id_remitente_grupo = id_remitente_grupo.split("_")[3]
@@ -180,7 +171,7 @@ async def webhook(request: Request):
                     print(f"Información del contacto en grupo: {info_contacto}")
                 mensaje = data.get("body", "")
                 tipo_mensaje = data.get("type", "desconocido")
-                remitente = info_contacto.get("pushName", "name")
+                remitente = info_contacto.get("name", "pushName")
                 destinatario = info_contacto_destinatario.get("name", "pushName")
                 print(f"Tipo de mensaje: {tipo_mensaje}")
                 print(f"Mensaje recibido: {mensaje}")
@@ -196,28 +187,26 @@ async def webhook(request: Request):
                     id_citado = None
                     body_citado = ""
 
-                if tipo_mensaje == "chat" and "@gemma" in mensaje:
+                if tipo_mensaje == "text" and "@gemma" in mensaje:
                     print("Procesando mensaje de chat...", id_mensaje)
+                    delivery_id = payload.get("deliveryId")
                     if body_citado != "" and id_citado is not None:
                         media_citado = consultar_media_mensaje_citado(chat_id, id_citado)
                         if media_citado is not None:
-                            respuesta = await chat(mensaje + " " + f"'{body_citado}'", destinatario, chat_id, media_citado)
+                            respuesta = await chat(mensaje + " " + f"'{body_citado}'", destinatario, id_remitente_grupo, chat_id, media_citado, delivery_id=delivery_id)
                         else:
-                            respuesta = await chat(mensaje + " " + f"'{body_citado}'", destinatario, chat_id)
+                            respuesta = await chat(mensaje + " " + f"'{body_citado}'", destinatario, id_remitente_grupo, chat_id, delivery_id=delivery_id)
                     else:
-                        respuesta = await chat(mensaje, destinatario, chat_id)
+                        respuesta = await chat(mensaje, destinatario, id_remitente_grupo, chat_id, delivery_id=delivery_id)
                     print(f"Respuesta generada: {respuesta}")
-                    if respuesta["response"] == "emoji generado":
+                    if "emoji" in respuesta and id_mensaje:
                         await reaccionar_mensaje(id_destinatario, id_mensaje, respuesta["emoji"])
-                        return {"status": "ok","response": respuesta} 
-                    if "audio" in mensaje:
-                        print("Generando respuesta de audio...")
-                        respuesta_audio = await generar_respuesta_audio_IA(respuesta["response"], payload.get("deliveryId"), mensaje)
-                        print(f"Respuesta de audio generada: {respuesta_audio}")
-                        if "audio_file" in respuesta_audio:
-                            await enviar_mensaje_audio(id_destinatario, respuesta_audio['audio_file'])
-                        else:
-                            await enviar_mensaje(id_destinatario, "No se pudo generar la respuesta de audio.", id_mensaje)
+                    if respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
+                        await enviar_mensaje_audio(id_destinatario, respuesta["audio_file"])
+                    elif respuesta.get("response") == "audio generado":
+                        await enviar_mensaje(id_destinatario, "🔷 Gemma: No se pudo generar la respuesta de audio.", id_mensaje)
+                    elif respuesta.get("response") == "imagen generada" and "image_file" in respuesta:
+                        await enviar_mensaje_imagen(chat_id, respuesta["image_file"])
                     else:
                         await enviar_mensaje(id_destinatario, "🔷 Gemma: " + respuesta["response"], id_mensaje)
                     return {
@@ -228,19 +217,14 @@ async def webhook(request: Request):
                     media = data.get("media", None)
                     if media is not None:
                         print("Procesando mensaje de chat...", id_mensaje)
-                        respuesta = await chat(mensaje, remitente, chat_id, media)
+                        respuesta = await chat(mensaje, remitente, chat_id, media, delivery_id=payload.get("deliveryId"))
                         print(f"Respuesta generada: {respuesta}")
-                        if respuesta["response"] == "emoji generado":
+                        if "emoji" in respuesta and id_mensaje:
                             await reaccionar_mensaje(id_destinatario, id_mensaje, respuesta["emoji"])
-                            return {"status": "ok","response": respuesta} 
-                        if "audio" in mensaje:
-                            print("Generando respuesta de audio...")
-                            respuesta_audio = await generar_respuesta_audio_IA(respuesta["response"], payload.get("deliveryId"), mensaje)
-                            print(f"Respuesta de audio generada: {respuesta_audio}")
-                            if "audio_file" in respuesta_audio:
-                                await enviar_mensaje_audio(chat_id, respuesta_audio['audio_file'])
-                            else:
-                                await enviar_mensaje(chat_id, "No se pudo generar la respuesta de audio.", id_mensaje)
+                        if respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
+                            await enviar_mensaje_audio(chat_id, respuesta["audio_file"])
+                        elif respuesta.get("response") == "audio generado":
+                            await enviar_mensaje(chat_id, "🔷 Gemma: No se pudo generar la respuesta de audio.", id_mensaje)
                         else:
                             await enviar_mensaje(chat_id, "🔷 Gemma: " + respuesta["response"], id_mensaje)
                         return {
@@ -249,20 +233,18 @@ async def webhook(request: Request):
                         }
                     else:
                         return {"status": "error", "message": "No se pudo obtener los medios del mensaje."}    
-                elif tipo_mensaje == "ptt":
+                elif tipo_mensaje == "ptt" or tipo_mensaje == "audio":
                     media = data.get("media", None)
                     if media is not None:
                         print("Procesando mensaje de voz...")
-                        respuesta = await chat(mensaje, remitente, chat_id, media)
-                        if respuesta["response"] == "emoji generado":
-                            await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
-                            return {"status": "ok","response": respuesta} 
+                        respuesta = await chat(mensaje, remitente, chat_id, media, delivery_id=payload.get("deliveryId"))
                         print(f"Respuesta generada: {respuesta}")
                         if respuesta["response"] == "IGNORAR_AUDIO":
                             return {"status": "error", "message": "No se llamo a gemma en el mensaje."}
-                        else:
-                            if respuesta["response"] != "No se pudo obtener el tipo de archivo.":
-                                await enviar_mensaje(chat_id, "🔷 Gemma: " + respuesta["response"], id_mensaje)
+                        if "emoji" in respuesta and id_mensaje:
+                            await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
+                        if respuesta["response"] != "No se pudo obtener el tipo de archivo.":
+                            await enviar_mensaje(chat_id, "🔷 Gemma: " + respuesta["response"], id_mensaje)
                     else:
                         return {"status": "error", "message": "No se pudo obtener los medios del mensaje."}    
             else:

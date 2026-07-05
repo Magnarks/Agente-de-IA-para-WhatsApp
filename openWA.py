@@ -108,8 +108,8 @@ def registrar_webhook_openwa(estado_conexion_openwa):
     }
     parametros = {
         "url": settings.OPENWA_WEBHOOK_URL,
-        "events":  ["message.sent","message.received","session.connected", "session.disconnected", "session.qr", "*"],
-        "secret": "215f628d-210d-47ed-9f5a-44a7e2781f01",
+        "events": ["message.received", "message.sent", "message.ack", "message.failed", "message.revoked", "message.reaction", "session.status", "session.qr", "session.authenticated", "session.disconnected", "group.join", "group.leave", "group.update", "*"],
+        "secret": settings.OPENWA_SECRET_WEBHOOK,
         "headers": {
             "X-Custom-Header": "value"
         },
@@ -269,7 +269,8 @@ async def enviar_mensaje_audio(contact_id, audio_file_path):
     payload = {
         "chatId": contact_id,
         "base64": audio_string,
-        "mimetype": "audio/ogg"
+        "mimetype": "audio/ogg",
+        "ptt": True
     }
     # payload = {
     #     "chatId": contact_id,
@@ -285,6 +286,50 @@ async def enviar_mensaje_audio(contact_id, audio_file_path):
             return True
         else:
             print("Error al enviar el mensaje de audio.", response.status_code, response.text)
+            return False
+    except requests.exceptions.Timeout:
+        print("Error: La solicitud ha excedido el tiempo de espera.")
+    except requests.exceptions.RequestException as e:
+        print(f"Error en la solicitud: {e}")
+        return False
+    
+async def enviar_mensaje_imagen(contact_id, base64_image):
+
+    print(f"Preparando para enviar el mensaje de imagen al contacto: {contact_id}")
+
+    # with open(image_file_path, "rb") as archivo_imagen:
+    #     datos_binarios = archivo_imagen.read()
+        
+    #     # Convierte a Base64
+    #     imagen_base64 = base64.b64encode(datos_binarios)
+        
+    #     # Convierte el resultado de bytes a string (opcional)
+    #     imagen_string = imagen_base64.decode('utf-8')
+
+    api_url = f"{settings.OPENWA_BASE_URL}/api/sessions/{settings.OPENWA_SESSION_ID}/messages/send-image"
+    headers = {
+        "Accept": "*/*",
+        "Authorization": f"Bearer {settings.OPENWA_API_TOKEN}",
+    }
+    payload = {
+        "chatId": contact_id,
+        "base64": base64_image,
+        "mimetype": "image/jpeg",
+    }
+    # payload = {
+    #     "chatId": contact_id,
+    #     "image": {
+    #         "url": f"http://127.0.0.1:8000/images/respuesta_imagen_{image_file_path.split('_')[-1]}"
+    #     },
+    #     "ptt": True
+    # }
+    try:
+        response = requests.post(api_url, headers=headers, json=payload, timeout=30)
+        if response.status_code == 200 or response.status_code == 201:
+            print("Mensaje de imagen enviado exitosamente.")
+            return True
+        else:
+            print("Error al enviar el mensaje de imagen.", response.status_code, response.text)
             return False
     except requests.exceptions.Timeout:
         print("Error: La solicitud ha excedido el tiempo de espera.")
