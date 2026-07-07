@@ -7,7 +7,7 @@ import os
 import subprocess
 import base64
 from tavily import TavilyClient, TavilyKeylessLimitError
-from database_chatbot import consultar_mensajes, consultar_memorias
+from database_chatbot import consultar_mensajes, consultar_memorias, guardar_memoria
 from generador_imagenes import generar_imagen
 import whisper
 import tempfile
@@ -28,18 +28,19 @@ MODEL_NAME = settings.MODEL_NAME
 SYSTEM_MESSAGE = settings.SYSTEM_MESSAGE
 
 historial_conversacion = {}
+contador_llamadas = {}
+RECARGAR_CADA = 10  # Recargar memorias y fecha cada N llamadas por usuario
 
-fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
+#fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 async def guardar_memoria_IA(remitente: str, id_remitente: str, memoria: str):
-    from database_chatbot import guardar_memoria
     resultado = guardar_memoria(remitente, id_remitente, memoria)
     print(f"Memoria guardada para {remitente} ({id_remitente}): {memoria}")
     return resultado
 
-async def generar_resumen_IA(id_chat: str, numero_mensajes: int):
+async def generar_resumen_IA(id_chat: str, numero_mensajes: int = 10):
     if id_chat != "":
+        numero_mensajes = int(numero_mensajes or 10)
         resumen = consultar_mensajes(id_chat, numero_mensajes)
         print("Resumen del chat obtenido: ", resumen)
         return resumen
@@ -53,6 +54,12 @@ async def pedir_imagen_IA(peticion: str):
     imagen_pedida = generar_imagen(peticion)
     print("Imagen pedida:", imagen_pedida)
     return imagen_pedida
+
+async def enviar_encuesta_IA(encuesta: str, opciones: list, multiple: bool = False):
+    if not encuesta or not opciones:
+        return {"error": "La encuesta y las opciones no pueden estar vacías."}
+    print("Encuesta generada:", encuesta, opciones, multiple)
+    return {"encuesta": encuesta, "opciones": opciones, "multiple": multiple}
 
 def limpiar_tool_calls_texto(contenido: str, reaccion_emoji=None):
     """Elimina patrones de tool calls filtrados como texto y extrae emojis de generar_reaccion_IA."""
@@ -199,7 +206,7 @@ async def transcribir_con_whisper_local(wav_bytes):
 async def generar_respuesta_audio_IA(texto, delivery_id, tipo_voz="masculina"):
     try:
         if tipo_voz == "femenina":
-            voz = settings.VOZ_FEMENINIA
+            voz = settings.VOZ_FEMENINA
             texto_voz = settings.TEXTO_VOZ_FEMENINA
         else:
             voz = settings.VOZ_MASCULINA
@@ -314,7 +321,7 @@ herramientas = [
         "type": "function",
         "function": {
             "name": "consultar_resultado_deportivo_IA",
-            "description": "Obtiene resultados de partidos ya finalizados o disputados anteriormente. Utilizar cuando el usuario pregunte quién ganó, cuánto quedó un partido, resultados históricos, estadísticas de encuentros terminados, tablas de posiciones o clasificación de torneos. No utilizar para partidos que se estén jugando en este momento.",
+            "description": "Obtiene resultados de partidos ya finalizados o disputados anteriormente. Utilizar cuando el usuario pregunte quién ganó, cuánto quedó un partido, resultados históricos, estadísticas de encuentros terminados, tablas de posiciones o clasificación de torneos. No utilizar para partidos que se estén jugando en este momento. NO la utilices para crear encuestas, pronósticos, apuestas o juegos.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -350,7 +357,9 @@ herramientas = [
             "name": "generar_reaccion_IA",
             "description": """
                 Siempre usa esta herramienta para reaccionar a cada mensaje con UN único emoji apropiado.
-                La reacción SIEMPRE va acompañada de una respuesta en texto o audio.
+                La reacción SIEMPRE va acompañada de una respuesta en texto.
+                Solo puedes llamar generar_reaccion_IA UNA VEZ por mensaje del usuario. Nunca la llames dos veces en el mismo turno, incluso si cambias de opinión sobre el emoji.
+                No vuelvas a llamar generar_reaccion_IA en este turno.
                 Solo retorna UN único emoji, nunca combines múltiples emojis.
 
                 Ejemplos:
@@ -400,7 +409,7 @@ herramientas = [
         "type": "function",
         "function": {
             "name": "guardar_memoria_IA",
-            "description": "Utiliza esta herramienta para guardar información importante que deba ser recordada en el futuro. Por ejemplo, si el usuario te dice su nombre, su cumpleaños, su dirección, su número de teléfono o cualquier otro dato personal que pueda ser útil recordar más adelante.",
+            "description": "Utiliza esta herramienta para guardar información importante que deba ser recordada en el futuro o para mantener futuras interacciones más personalizadas. Por ejemplo, si el usuario dice su nombre, su cumpleaños, su dirección, su número de teléfono, gustos, preferencias o cualquier otro dato personal que pueda ser útil recordar más adelante.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -429,17 +438,148 @@ herramientas = [
                 "required": ["peticion"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "enviar_encuesta_IA",
+            "description": "Debes generar las opciones de respuesta (No generes mas de 12 opciones) y el texto de la encuesta basado en la solicitud del usuario. Utilizar cuando el usuario solicite enviar una encuesta, sondeo, votación o cualquier forma de recopilación de opiniones. NO consultes herramientas deportivas antes de generar la encuesta, salvo que el usuario solicite explícitamente información real del partido.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "encuesta": {
+                        "type": "string",
+                        "description": "El texto de la encuesta."
+                    },
+                    "opciones": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "minItems":2,
+                        "maxItems":12,
+                        "description": "Las opciones de respuesta de la encuesta."
+                    },
+                    "multiple": {
+                        "type": "boolean",
+                        "description": "Indica si se permiten múltiples respuestas. Por defecto es falso."
+                    }
+                },
+                "required": ["encuesta", "opciones"]
+            }
+        }
     }
 ]
+
+MAX_ITERACIONES_TOOLS = 3  # límite de seguridad para evitar loops infinitos
+ 
+ 
+async def ejecutar_tool(tool_name, tool_args, contexto):
+    """
+    Ejecuta una tool y devuelve (resultado, respuesta_temprana).
+ 
+    - resultado: lo que se guarda como contenido del mensaje role='tool'
+    - respuesta_temprana: dict a retornar INMEDIATAMENTE desde chat() (para
+      los casos de audio/imagen/encuesta que cortan el flujo), o None si
+      hay que seguir el ciclo normal (pedirle texto al modelo).
+ 
+    contexto es un dict mutable con: usuario, id_usuario, chat_id,
+    delivery_id, reaccion_emoji. Se muta in-place para que el emoji de
+    reacción persista entre llamadas y quede disponible en el response final.
+    """
+    usuario = contexto["usuario"]
+    id_usuario = contexto["id_usuario"]
+    chat_id = contexto["chat_id"]
+    delivery_id = contexto["delivery_id"]
+ 
+    if tool_name == "generar_reaccion_IA":
+        contexto["reaccion_emoji"] = await generar_reaccion_IA(tool_args.get("emoji"))
+        return {"emoji": contexto["reaccion_emoji"]}, None
+ 
+    if tool_name == "generar_resumen_IA":
+        resultado = await generar_resumen_IA(chat_id, tool_args.get("numero_mensajes", 10))
+        return resultado, None
+ 
+    if tool_name == "generar_respuesta_audio_IA":
+        texto_audio = tool_args.get("texto")
+        tipo_voz = tool_args.get("tipo_voz", "masculina")
+        _delivery_id = delivery_id or str(uuid.uuid4())
+        resultado_audio = await generar_respuesta_audio_IA(texto_audio, _delivery_id, tipo_voz)
+        if "audio_file" in resultado_audio:
+            response_data = {"response": "audio generado", "audio_file": resultado_audio["audio_file"]}
+            if contexto.get("reaccion_emoji"):
+                response_data["emoji"] = contexto["reaccion_emoji"]
+            return resultado_audio, response_data
+        return resultado_audio, None
+ 
+    if tool_name == "guardar_memoria_IA":
+        resultado = await guardar_memoria_IA(usuario, id_usuario, tool_args.get("memoria"))
+        return resultado, None
+ 
+    if tool_name == "consultar_internet_IA":
+        return consultar_internet_IA(tool_args.get("buscar")), None
+ 
+    if tool_name == "consultar_resultado_deportivo_IA":
+        resultado = consultar_resultado_deportivo_IA(tool_args.get("buscar"))
+        if isinstance(resultado, dict) and not resultado.get("data"):
+            resultado = ("No se encontraron resultados de partidos para este período. "
+                         "Responde al usuario basándote en tu conocimiento general.")
+        return resultado, None
+ 
+    if tool_name == "consultar_partido_deportivo_en_vivo_IA":
+        resultado = consultar_partido_deportivo_en_vivo_IA(tool_args.get("buscar"))
+        if isinstance(resultado, dict) and not resultado.get("response"):
+            resultado = ("No hay partidos en vivo disponibles en este momento según la API. "
+                         "Proporciona al usuario tu pronóstico o análisis basado en tu "
+                         "conocimiento general de los equipos.")
+        return resultado, None
+ 
+    if tool_name == "pedir_imagen_IA":
+        resultado_imagen = await pedir_imagen_IA(tool_args.get("peticion"))
+        if isinstance(resultado_imagen, dict) and "artifacts" in resultado_imagen:
+            response_data = {
+                "response": "imagen generada",
+                "image_file": resultado_imagen["artifacts"][0]["base64"],
+            }
+            if contexto.get("reaccion_emoji"):
+                response_data["emoji"] = contexto["reaccion_emoji"]
+            return resultado_imagen, response_data
+        return resultado_imagen, None
+ 
+    if tool_name == "enviar_encuesta_IA":
+        opciones = tool_args.get("opciones")
+        resultado_encuesta = await enviar_encuesta_IA(
+            tool_args.get("encuesta"),
+            opciones,
+            tool_args.get("multiple", False),
+        )
+        if isinstance(opciones, str):
+            try:
+                opciones = json.loads(opciones)
+            except Exception:
+                opciones = [opciones]
+        if "encuesta" in resultado_encuesta:
+            response_data = {
+                "response": "encuesta generada",
+                "encuesta": resultado_encuesta["encuesta"],
+                "opciones": opciones,
+                "multiple": resultado_encuesta["multiple"],
+            }
+            if contexto.get("reaccion_emoji"):
+                response_data["emoji"] = contexto["reaccion_emoji"]
+            return resultado_encuesta, response_data
+        return resultado_encuesta, None
+ 
+    return "Función no reconocida", None
 
 async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delivery_id=None):
     usuario = remitente
     id_usuario = id_remitente_grupo
-
+ 
     if usuario not in historial_conversacion:
         historial_conversacion[usuario] = []
         historial_conversacion[usuario].append({"role": "system", "content": SYSTEM_MESSAGE})
-        historial_conversacion[usuario].append({"role": "system", "content": f"Fecha actual: {fecha_actual}"})
+        historial_conversacion[usuario].append({"role": "system", "content": f"Fecha actual: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"})
         # Cargar memorias previas del usuario
         memorias_previas = consultar_memorias(usuario, id_usuario)
         if memorias_previas:
@@ -448,26 +588,47 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
                 "role": "system",
                 "content": f"Memorias del usuario almacenadas:\n{contenido_memorias}"
             })
-
+        # Cargar contexto mensajes previos del chat
+        mensajes_previos = consultar_mensajes(chat_id, 10)  # Obtener los últimos 10 mensajes del chat
+        if mensajes_previos:
+            contenido_mensajes = "\n".join([f"- [{m.get('timestamp', '')}] {m.get('author', m.get('from', 'desconocido'))}: {m.get('body', '')}" for m in mensajes_previos])
+            historial_conversacion[usuario].append({
+                "role": "system",
+                "content": f"Mensajes previos del chat:\n{contenido_mensajes}"
+            })
+        contador_llamadas[usuario] = 0
+ 
+    # Actualizar fecha y recargar memorias cada RECARGAR_CADA llamadas
+    contador_llamadas[usuario] = contador_llamadas.get(usuario, 0) + 1
+    if contador_llamadas[usuario] % RECARGAR_CADA == 0:
+        for i, msg in enumerate(historial_conversacion[usuario]):
+            if msg.get("role") == "system" and "Fecha actual:" in msg.get("content", ""):
+                historial_conversacion[usuario][i]["content"] = f"Fecha actual: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                break
+        memorias_actualizadas = consultar_memorias(usuario, id_usuario)
+        if memorias_actualizadas:
+            contenido_memorias = "\n".join([f"- [{m['fecha']}] {m['memoria']}" for m in memorias_actualizadas])
+            nuevo_msg = {"role": "system", "content": f"Memorias del usuario actualizadas:\n{contenido_memorias}"}
+            idx_memorias = next((i for i, msg in enumerate(historial_conversacion[usuario])
+                                 if msg.get("role") == "system" and "Memorias del usuario" in msg.get("content", "")), None)
+            if idx_memorias is not None:
+                historial_conversacion[usuario][idx_memorias] = nuevo_msg
+            else:
+                historial_conversacion[usuario].insert(2, nuevo_msg)
+        print(f"[INFO] Memorias y fecha actualizadas para {usuario} (llamada #{contador_llamadas[usuario]})")
+ 
     if b64 is None:
         historial_conversacion[usuario].append({"role": "user", "content": mensaje})
     else:
         tipo_b64 = b64.get('mimetype', None)
         if tipo_b64 == "image/jpeg":
             jpeg_base64 = b64.get("data")
-            historial_conversacion[usuario].append({"role": "user", "content": [{"type": "text","text": mensaje},{"type": "image_url","image_url": {"url": f"data:image/jpeg;base64,{jpeg_base64}"}}]})
+            historial_conversacion[usuario].append({"role": "user", "content": [{"type": "text", "text": mensaje}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{jpeg_base64}"}}]})
         elif tipo_b64 == "audio/ogg":
             ogg_bytes = base64.b64decode(b64.get('data', None))
             if ogg_bytes is not None:
                 process = subprocess.run(
-                    [
-                        "ffmpeg",
-                        "-i", "pipe:0",
-                        "-f", "wav",
-                        "-ac", "1",
-                        "-ar", "16000",
-                        "pipe:1"
-                    ],
+                    ["ffmpeg", "-i", "pipe:0", "-f", "wav", "-ac", "1", "-ar", "16000", "pipe:1"],
                     input=ogg_bytes,
                     capture_output=True
                 )
@@ -475,208 +636,137 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
                 wav_base64 = base64.b64encode(wav_bytes).decode()
                 buscando_gemma = await transcribir_con_whisper_local(wav_bytes)
                 if "gema" or "gemma" in buscando_gemma.lower():
-                    historial_conversacion[usuario].append({"role": "user", "content": [{"type": "text","text": "Transcribe el audio. Si NO escuchas las palabras: gemma o gema responde exactamente: IGNORAR_AUDIO Sin explicaciones adicionales. Si sí escuchas alguna de esas palabras, responde normalmente."},{"type": "input_audio","input_audio": {"data": wav_base64,"format": "wav"}}]})
+                    historial_conversacion[usuario].append({"role": "user", "content": [{"type": "text", "text": "Transcribe el audio. Si NO escuchas las palabras: gemma o gema responde exactamente: IGNORAR_AUDIO Sin explicaciones adicionales. Si sí escuchas alguna de esas palabras, responde normalmente."}, {"type": "input_audio", "input_audio": {"data": wav_base64, "format": "wav"}}]})
                 else:
                     return {"response": "No se pudo procesar el audio, o No se llamo a gemma en el mensaje."}
             else:
                 return {"response": "No se pudo procesar el audio."}
         else:
             return {"response": "No se pudo obtener el tipo de archivo."}
-
+ 
     print(f"[DEBUG] Historial de conversación para {usuario}: {historial_conversacion[usuario]}")
-    
+ 
     try:
         user_input = mensaje.strip()
-
+ 
         if not user_input and b64 is None:
             return {"response": "Por favor, envía un mensaje válido."}
-
-        print(f"[DEBUG] Enviando al modelo con {len(historial_conversacion[usuario])} mensajes")
-        response = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=historial_conversacion[usuario],
-            tools=herramientas
-        )
-
-        print(f"[DEBUG] Respuesta recibida. Tool calls: {response.choices[0].message.tool_calls}")
-        print(response.choices[0].message)
-        print(response.choices[0].message.content)
-        print(response.choices[0].message.tool_calls)
-
-        if response.choices[0].message.tool_calls:
-            print(f"[DEBUG] Se encontraron {len(response.choices[0].message.tool_calls)} tool_calls")
-            historial_conversacion[usuario].append({
-                "role": "assistant",
-                "content": response.choices[0].message.content,
-                "tool_calls": [
-                    {
-                        "id": tc.id,
-                        "type": "function",
-                        "function": {
-                            "name": tc.function.name,
-                            "arguments": tc.function.arguments
-                        }
-                    }
-                    for tc in response.choices[0].message.tool_calls
-                ]
-            })
-
-            reaccion_emoji = None
-            for tool_call in response.choices[0].message.tool_calls:
-                tool_name = tool_call.function.name
-                tool_args = json.loads(tool_call.function.arguments)
-
-                print(f"Ejecutando herramienta: {tool_name} con args: {tool_args}")
-
-                if tool_name == "generar_resumen_IA":
-                    resultado = await generar_resumen_IA(chat_id, tool_args.get("cantidad mensajes"))
-                elif tool_name == "generar_respuesta_audio_IA":
-                    texto_audio = tool_args.get("texto")
-                    tipo_voz = tool_args.get("tipo_voz", "masculina")
-                    _delivery_id = delivery_id or str(uuid.uuid4())
-                    resultado_audio = await generar_respuesta_audio_IA(texto_audio, _delivery_id, tipo_voz)
-                    if "audio_file" in resultado_audio:
-                        response_data = {"response": "audio generado", "audio_file": resultado_audio["audio_file"]}
-                        if reaccion_emoji:
-                            response_data["emoji"] = reaccion_emoji
-                        return response_data
-                    resultado = resultado_audio
-                elif tool_name == "guardar_memoria_IA":
-                    resultado = await guardar_memoria_IA(usuario, id_usuario, tool_args.get("memoria"))
-                elif tool_name == "consultar_internet_IA":
-                    resultado = consultar_internet_IA(tool_args.get("buscar"))
-                elif tool_name == "consultar_resultado_deportivo_IA":
-                    resultado = consultar_resultado_deportivo_IA(tool_args.get("buscar"))
-                    if isinstance(resultado, dict) and not resultado.get("data"):
-                        resultado = "No se encontraron resultados de partidos para este período. Responde al usuario basándote en tu conocimiento general."
-                elif tool_name == "consultar_partido_deportivo_en_vivo_IA":
-                    resultado = consultar_partido_deportivo_en_vivo_IA(tool_args.get("buscar"))
-                    if isinstance(resultado, dict) and not resultado.get("response"):
-                        resultado = "No hay partidos en vivo disponibles en este momento según la API. Proporciona al usuario tu pronóstico o análisis basado en tu conocimiento general de los equipos."
-                elif tool_name == "generar_reaccion_IA":
-                    reaccion_emoji = await generar_reaccion_IA(tool_args.get("emoji"))
-                    resultado = {"emoji": reaccion_emoji}
-                elif tool_name == "pedir_imagen_IA":
-                    resultado_imagen = await pedir_imagen_IA(tool_args.get("peticion"))
-                    if "artifacts" in resultado_imagen:
-                            response_data = {"response": "imagen generada", "image_file": resultado_imagen["artifacts"][0]["base64"]}
-                            if reaccion_emoji:
-                                response_data["emoji"] = reaccion_emoji
-                            return response_data
-                    resultado = resultado_imagen
-                else:
-                    resultado = "Función no reconocida"
-
-                historial_conversacion[usuario].append({
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": f"Resultado de {tool_name}: {json.dumps(resultado, default=str)}"
-                })
-
-            final_response = client.chat.completions.create(
+ 
+        contexto = {
+            "usuario": usuario,
+            "id_usuario": id_usuario,
+            "chat_id": chat_id,
+            "delivery_id": delivery_id,
+            "reaccion_emoji": None,
+        }
+ 
+        contenido = ""
+        agoto_iteraciones = True
+ 
+        for _ in range(MAX_ITERACIONES_TOOLS):
+            print(f"[DEBUG] Enviando al modelo con {len(historial_conversacion[usuario])} mensajes")
+            respuesta = client.chat.completions.create(
                 model=MODEL_NAME,
                 messages=historial_conversacion[usuario],
                 tools=herramientas
             )
-
-            # Si final_response también tiene tool_calls (ej: generar_reaccion_IA)
-            if final_response.choices[0].message.tool_calls:
-                historial_conversacion[usuario].append({
-                    "role": "assistant",
-                    "content": final_response.choices[0].message.content,
-                    "tool_calls": [
-                        {
-                            "id": tc.id,
-                            "type": "function",
-                            "function": {"name": tc.function.name, "arguments": tc.function.arguments}
-                        }
-                        for tc in final_response.choices[0].message.tool_calls
-                    ]
-                })
-                for tc in final_response.choices[0].message.tool_calls:
-                    tc_args = json.loads(tc.function.arguments)
-                    if tc.function.name == "generar_reaccion_IA" and not reaccion_emoji:
-                        reaccion_emoji = await generar_reaccion_IA(tc_args.get("emoji"))
-                        tc_resultado = {"emoji": reaccion_emoji}
-                    elif tc.function.name == "pedir_imagen_IA":
-                        tc_resultado = await pedir_imagen_IA(tc_args.get("peticion"))
-                        if "artifacts" in tc_resultado:
-                            response_data = {"response": "imagen generada", "image_file": tc_resultado["artifacts"][0]["base64"]}
-                            if reaccion_emoji:
-                                response_data["emoji"] = reaccion_emoji
-                            return response_data
-                    elif tc.function.name == "consultar_internet_IA":
-                        tc_resultado = consultar_internet_IA(tc_args.get("buscar"))
-                    elif tc.function.name == "guardar_memoria_IA":
-                        tc_resultado = await guardar_memoria_IA(usuario, id_usuario, tc_args.get("memoria"))
-                    elif tc.function.name == "generar_respuesta_audio_IA":
-                        _did = delivery_id or str(uuid.uuid4())
-                        tc_resultado = await generar_respuesta_audio_IA(tc_args.get("texto"), _did, tc_args.get("tipo_voz", "masculina"))
-                        if "audio_file" in tc_resultado:
-                            response_data = {"response": "audio generado", "audio_file": tc_resultado["audio_file"]}
-                            if reaccion_emoji:
-                                response_data["emoji"] = reaccion_emoji
-                            return response_data
+            msg = respuesta.choices[0].message
+            print(f"[DEBUG] Tool calls: {msg.tool_calls}")
+ 
+            if not msg.tool_calls:
+                contenido = msg.content or ""
+                agoto_iteraciones = False
+                break
+ 
+            historial_conversacion[usuario].append({
+                "role": "assistant",
+                "content": msg.content,
+                "tool_calls": [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {"name": tc.function.name, "arguments": tc.function.arguments}
+                    }
+                    for tc in msg.tool_calls
+                ]
+            })
+ 
+            respuesta_temprana = None
+            for tool_call in msg.tool_calls:
+                tool_name = tool_call.function.name
+                tool_args = json.loads(tool_call.function.arguments)
+                print(f"Ejecutando herramienta: {tool_name} con args: {tool_args}")
+ 
+                resultado, posible_respuesta_temprana = await ejecutar_tool(tool_name, tool_args, contexto)
+                if posible_respuesta_temprana is not None:
+                    respuesta_temprana = posible_respuesta_temprana
+ 
+                if tool_name == "generar_reaccion_IA":
+                    if isinstance(resultado, dict) and resultado.get("ya_registrada"):
+                        contenido_tool_msg = (
+                            f"Ya reaccionaste con '{contexto['reaccion_emoji']}' a este mensaje. "
+                            "No vuelvas a llamar generar_reaccion_IA en este turno. "
+                            "Responde al usuario con texto."
+                        )
                     else:
-                        tc_resultado = "ok"
-                    historial_conversacion[usuario].append({
-                        "role": "tool",
-                        "tool_call_id": tc.id,
-                        "content": json.dumps(tc_resultado, default=str)
-                    })
-                # Llamada final sin tools para obtener el texto
-                text_response = client.chat.completions.create(
+                        contenido_tool_msg = f"Reacción '{contexto['reaccion_emoji']}' registrada. Ahora responde al usuario con texto."
+                else:
+                    contenido_tool_msg = f"Resultado de {tool_name}: {json.dumps(resultado, default=str)}"
+ 
+                historial_conversacion[usuario].append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": contenido_tool_msg
+                })
+ 
+            if respuesta_temprana is not None:
+                return respuesta_temprana
+            # si no hubo corte anticipado, se vuelve a llamar al modelo
+            # (con los resultados de las tools ya en el historial)
+ 
+        if agoto_iteraciones:
+            print(f"[WARN] Se alcanzaron las {MAX_ITERACIONES_TOOLS} iteraciones de tool calls sin respuesta de texto")
+ 
+        reaccion_emoji = contexto["reaccion_emoji"]
+        contenido, reaccion_emoji = limpiar_tool_calls_texto(contenido, reaccion_emoji)
+ 
+        # Detectar pedir_imagen_IA si el modelo la llamó como texto en lugar de function call
+        if 'pedir_imagen_IA' in contenido:
+            match_peticion = re.search(r'["\']peticion["\']?\s*:\s*["\']([^"\']+)["\']', contenido, re.IGNORECASE)
+            if match_peticion:
+                prompt_imagen = match_peticion.group(1)
+                print(f"[INFO] pedir_imagen_IA detectada como texto, ejecutando con: {prompt_imagen}")
+                resultado_img_txt = await pedir_imagen_IA(prompt_imagen)
+                if isinstance(resultado_img_txt, dict) and "artifacts" in resultado_img_txt:
+                    rdata = {"response": "imagen generada", "image_file": resultado_img_txt["artifacts"][0]["base64"]}
+                    if reaccion_emoji:
+                        rdata["emoji"] = reaccion_emoji
+                    historial_conversacion[usuario].append({"role": "assistant", "content": "Imagen generada"})
+                    return rdata
+                contenido = re.sub(r'\{[^{}]*pedir_imagen_IA[^{}]*\}', '', contenido, flags=re.DOTALL | re.IGNORECASE).strip()
+ 
+        # Fallback si el modelo no devolvió texto: se le fuerza a responder
+        # SOBRE EL MISMO HISTORIAL (que ya incluye los resultados de las tools),
+        # solo que ahora sin poder volver a llamar herramientas.
+        if not contenido:
+            print("[WARN] Contenido vacío, forzando respuesta de texto con tool_choice='none'")
+            try:
+                fallback_resp = client.chat.completions.create(
                     model=MODEL_NAME,
                     messages=historial_conversacion[usuario],
+                    tools=herramientas,
                     tool_choice="none"
                 )
-                contenido = text_response.choices[0].message.content or ""
+                contenido = fallback_resp.choices[0].message.content or ""
                 contenido, reaccion_emoji = limpiar_tool_calls_texto(contenido, reaccion_emoji)
-            else:
-                contenido = final_response.choices[0].message.content or ""
-            contenido, reaccion_emoji = limpiar_tool_calls_texto(contenido, reaccion_emoji)
-
-            # Detectar pedir_imagen_IA si el modelo la llamó como texto en lugar de function call
-            if 'pedir_imagen_IA' in contenido:
-                match_peticion = re.search(r'["\']peticion["\']?\s*:\s*["\']([^"\']+)["\']', contenido, re.IGNORECASE)
-                if match_peticion:
-                    prompt_imagen = match_peticion.group(1)
-                    print(f"[INFO] pedir_imagen_IA detectada como texto, ejecutando con: {prompt_imagen}")
-                    resultado_img_txt = await pedir_imagen_IA(prompt_imagen)
-                    if isinstance(resultado_img_txt, dict) and "artifacts" in resultado_img_txt:
-                        rdata = {"response": "imagen generada", "image_file": resultado_img_txt["artifacts"][0]["base64"]}
-                        if reaccion_emoji:
-                            rdata["emoji"] = reaccion_emoji
-                        historial_conversacion[usuario].append({"role": "assistant", "content": "Imagen generada"})
-                        return rdata
-                    contenido = re.sub(r'\{[^{}]*pedir_imagen_IA[^{}]*\}', '', contenido, flags=re.DOTALL | re.IGNORECASE).strip()
-
-            # Fallback si el modelo retornó contenido vacío tras procesar tools
-            if not contenido:
-                print("[WARN] Contenido vacío tras procesar tools, llamada de fallback sin historial de tools")
-                mensajes_sin_tools = [
-                    m for m in historial_conversacion[usuario]
-                    if m.get("role") not in ("tool",) and "tool_calls" not in m
-                ]
-                try:
-                    fallback_resp = client.chat.completions.create(
-                        model=MODEL_NAME,
-                        messages=mensajes_sin_tools
-                    )
-                    contenido = fallback_resp.choices[0].message.content or ""
-                    contenido, reaccion_emoji = limpiar_tool_calls_texto(contenido, reaccion_emoji)
-                except Exception as fe:
-                    print(f"[WARN] Error en fallback: {fe}")
-
-            historial_conversacion[usuario].append({"role": "assistant", "content": contenido})
-            response_data = {"response": contenido}
-            if reaccion_emoji:
-                response_data["emoji"] = reaccion_emoji
-            return response_data
-        
-        contenido = response.choices[0].message.content or ""
-        contenido, _ = limpiar_tool_calls_texto(contenido)
+            except Exception as fe:
+                print(f"[WARN] Error en fallback: {fe}")
+ 
         historial_conversacion[usuario].append({"role": "assistant", "content": contenido})
-        return {"response": contenido}
+        response_data = {"response": contenido}
+        if reaccion_emoji:
+            response_data["emoji"] = reaccion_emoji
+        return response_data
+ 
     except Exception as e:
         return {"error": str(e)}

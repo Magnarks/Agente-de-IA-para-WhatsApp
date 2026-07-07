@@ -210,6 +210,7 @@ async def enviar_mensaje(contact_id, mensaje, id_mensaje = None):
             "chatId": contact_id,
             "quotedMessageId": id_mensaje,
             "text": mensaje
+            # "mentions": [m.strip() for m in settings.DEFAULT_MENTIONS_GROUP.split(",")]
         }
         try:
             response = requests.post(api_url, headers=headers, json=payload)
@@ -217,7 +218,7 @@ async def enviar_mensaje(contact_id, mensaje, id_mensaje = None):
                 print("Mensaje enviado exitosamente.")
                 return True
             else:
-                print("Error al enviar el mensaje.")
+                print("Error al enviar el mensaje.", response.status_code, response.text)
                 return False
         except requests.exceptions.Timeout:
             print("Error: La solicitud ha excedido el tiempo de espera.")
@@ -233,6 +234,7 @@ async def enviar_mensaje(contact_id, mensaje, id_mensaje = None):
         payload = {
             "chatId": contact_id,
             "text": mensaje
+            # "mentions": [m.strip() for m in settings.DEFAULT_MENTIONS_GROUP.split(",")]
         }
         try:
             response = requests.post(api_url, headers=headers, json=payload)
@@ -240,7 +242,7 @@ async def enviar_mensaje(contact_id, mensaje, id_mensaje = None):
                 print("Mensaje enviado exitosamente.")
                 return True
             else:
-                print("Error al enviar el mensaje.")
+                print("Error al enviar el mensaje.", response.status_code, response.text)
                 return False
         except requests.exceptions.Timeout:
             print("Error: La solicitud ha excedido el tiempo de espera.")
@@ -365,4 +367,31 @@ async def reaccionar_mensaje(contact_id, id_mensaje, emoji="👍"):
             return False
     else:
         print("No se envio id_mensaje")
+        return False
+    
+async def enviar_encuesta(contact_id, encuesta, opciones, multiple=False):
+
+    api_url = f"{settings.OPENWA_BASE_URL}/api/sessions/{settings.OPENWA_SESSION_ID}/messages/send-poll"
+    headers = {
+        "Accept": "*/*",
+        "Authorization": f"Bearer {settings.OPENWA_API_TOKEN}",
+    }
+    payload = {
+        "chatId": contact_id,
+        "name": encuesta,
+        "options": opciones,
+        "allowMultipleAnswers": multiple
+    }
+    try:
+        response = requests.post(api_url, headers=headers, json=payload)
+        if response.status_code == 200 or response.status_code == 201:
+            print("Encuesta enviada exitosamente.")
+            return True
+        else:
+            print("Error al enviar encuesta.", response.status_code, response.text)
+            return False
+    except requests.exceptions.Timeout:
+        print("Error: La solicitud ha excedido el tiempo de espera.")
+    except requests.exceptions.RequestException as e:
+        print(f"Error en la solicitud: {e}")
         return False

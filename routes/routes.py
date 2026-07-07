@@ -2,7 +2,7 @@ from fastapi import APIRouter, Request, HTTPException
 from config import settings
 import threading
 from chatIA import chat
-from openWA import obtener_informacion_contacto, obtener_informacion_grupo, enviar_mensaje, enviar_mensaje_audio, reaccionar_mensaje, enviar_mensaje_imagen
+from openWA import obtener_informacion_contacto, obtener_informacion_grupo, enviar_mensaje, enviar_mensaje_audio, reaccionar_mensaje, enviar_mensaje_imagen, enviar_encuesta
 from database_chatbot import guardar_mensaje, consultar_media_mensaje_citado
 
 # Caché para deduplicar eventos de webhook (message.id)
@@ -98,6 +98,11 @@ async def webhook(request: Request):
                         await enviar_mensaje(chat_id, "🔷 Gemma: No se pudo generar la respuesta de audio.", id_mensaje)
                     elif respuesta.get("response") == "imagen generada" and "image_file" in respuesta:
                         await enviar_mensaje_imagen(chat_id, respuesta["image_file"])
+                    elif respuesta.get("response") == "encuesta generada" and "encuesta" in respuesta and "opciones" in respuesta:
+                        encuesta = respuesta["encuesta"]
+                        opciones = respuesta["opciones"]
+                        multiple = respuesta.get("multiple", False)
+                        await enviar_encuesta(chat_id, encuesta, opciones, multiple)
                     else:
                         await enviar_mensaje(chat_id, "🔷 Gemma: " + respuesta["response"], id_mensaje)
                     return {
@@ -134,6 +139,13 @@ async def webhook(request: Request):
                             return {"status": "error", "message": "No se llamo a gemma en el mensaje."}
                         if "emoji" in respuesta and id_mensaje:
                             await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
+                        elif respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
+                            await enviar_mensaje_audio(chat_id, respuesta["audio_file"])
+                        elif respuesta.get("response") == "encuesta generada" and "encuesta" in respuesta and "opciones" in respuesta:
+                            encuesta = respuesta["encuesta"]
+                            opciones = respuesta["opciones"]
+                            multiple = respuesta.get("multiple", False)
+                            await enviar_encuesta(chat_id, encuesta, opciones, multiple)
                         if respuesta["response"] != "No se pudo obtener el tipo de archivo.":
                             await enviar_mensaje(chat_id, "🔷 Gemma: " + respuesta["response"], id_mensaje)
                     else:
@@ -207,6 +219,11 @@ async def webhook(request: Request):
                         await enviar_mensaje(id_destinatario, "🔷 Gemma: No se pudo generar la respuesta de audio.", id_mensaje)
                     elif respuesta.get("response") == "imagen generada" and "image_file" in respuesta:
                         await enviar_mensaje_imagen(chat_id, respuesta["image_file"])
+                    elif respuesta.get("response") == "encuesta generada" and "encuesta" in respuesta and "opciones" in respuesta:
+                        encuesta = respuesta["encuesta"]
+                        opciones = respuesta["opciones"]
+                        multiple = respuesta.get("multiple", False)
+                        await enviar_encuesta(id_destinatario, encuesta, opciones, multiple)
                     else:
                         await enviar_mensaje(id_destinatario, "🔷 Gemma: " + respuesta["response"], id_mensaje)
                     return {
@@ -243,6 +260,13 @@ async def webhook(request: Request):
                             return {"status": "error", "message": "No se llamo a gemma en el mensaje."}
                         if "emoji" in respuesta and id_mensaje:
                             await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
+                        elif respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
+                            await enviar_mensaje_audio(chat_id, respuesta["audio_file"])
+                        elif respuesta.get("response") == "encuesta generada" and "encuesta" in respuesta and "opciones" in respuesta:  
+                            encuesta = respuesta["encuesta"]
+                            opciones = respuesta["opciones"]
+                            multiple = respuesta.get("multiple", False)
+                            await enviar_encuesta(chat_id, encuesta, opciones, multiple)
                         if respuesta["response"] != "No se pudo obtener el tipo de archivo.":
                             await enviar_mensaje(chat_id, "🔷 Gemma: " + respuesta["response"], id_mensaje)
                     else:

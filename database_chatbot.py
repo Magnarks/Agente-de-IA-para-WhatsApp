@@ -43,3 +43,10 @@ def consultar_mensajes(id_chat, limite=10):
     for documento in busqueda:
         mensajes.append(documento)
     return mensajes
+
+def consultar_usuarios_grupo(id_chat):
+    busqueda = db["miembros_grupo_" + id_chat].find()
+    usuarios = []
+    for documento in busqueda:
+        usuarios.append(documento)
+    return usuarios
