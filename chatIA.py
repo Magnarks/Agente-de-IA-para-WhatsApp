@@ -493,6 +493,8 @@ async def ejecutar_tool(tool_name, tool_args, contexto):
     delivery_id = contexto["delivery_id"]
  
     if tool_name == "generar_reaccion_IA":
+        if contexto.get("reaccion_emoji"):
+            return {"emoji": contexto["reaccion_emoji"], "ya_registrada": True}, None
         contexto["reaccion_emoji"] = await generar_reaccion_IA(tool_args.get("emoji"))
         return {"emoji": contexto["reaccion_emoji"]}, None
  

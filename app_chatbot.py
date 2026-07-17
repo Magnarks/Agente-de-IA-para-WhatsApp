@@ -62,8 +62,8 @@ async def lifespan(app: FastAPI):
         print('No se inicializo modelo de IA')
     else:
         if len(lista_participantes) > 0 and sesion_realizada == "ready":
-            #await enviar_mensaje(settings.DEFAULT_GROUP, "🔷 Gemma: " + respuesta["response"])
-            pass
+            await enviar_mensaje(settings.DEFAULT_GROUP, settings.PREFIJO_MENSAJE + " " + respuesta["response"])
+            #pass
         else:
             print("No se pudo enviar el mensaje. Verifica que la sesión esté activa.")
         # El yield marca la transición entre startup y shutdown
@@ -76,14 +76,14 @@ async def lifespan(app: FastAPI):
         else:
             respuesta = await chat("Apagando... genera una respuesta de despedida.", "administrador", "", "")
         if respuesta.get("error") == 'Connection error.':
-            #await enviar_mensaje(settings.DEFAULT_GROUP, "🔷 Gemma: " + "Gemma Apagada...")  
+            #await enviar_mensaje(settings.DEFAULT_GROUP, settings.PREFIJO_MENSAJE + " Gemma Apagada...")  
             await asyncio.sleep(ESPERA_SEGUNDOS)
             await detener_sesion_openwa()
             estado_conexion_openwa = False
             print("Sesión de OpenWA detenida.")  
         else:
             if len(lista_participantes) > 0 and sesion_realizada == "ready":
-                #await enviar_mensaje(settings.DEFAULT_GROUP, "🔷 Gemma: " + respuesta["response"])    
+                await enviar_mensaje(settings.DEFAULT_GROUP, settings.PREFIJO_MENSAJE + " " + respuesta["response"])    
                 await asyncio.sleep(ESPERA_SEGUNDOS)
                 await detener_sesion_openwa()
                 estado_conexion_openwa = False
