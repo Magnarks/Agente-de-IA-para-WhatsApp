@@ -53,6 +53,7 @@ async def lifespan(app: FastAPI):
         participantes = consultar_usuarios_grupo(settings.DEFAULT_GROUP)
         if participantes != "":
             lista_participantes = participantes
+            print(f"Participantes del grupo {settings.DEFAULT_GROUP}: {lista_participantes}")
     if len(lista_participantes) > 0 and sesion_realizada == "ready":
         respuesta = await chat(f"iniciando... en tu respuesta si es posible di la fecha actual y si encuentras participantes del grupo saludalos usando su lid (esto hace que se mencionen como un mensaje de WhatsApp, IMPORTANTE NUNCA INVENTES O MODIFIQUES EL VALOR ESTE YA ESTA CARGADO DESDE BASE DE DATOS) y según la hora en el saludo menciona buenos días, buenas tardes o buenas noches. Los participantes están en esta lista de Python: {lista_participantes}. también saluda a @clau", "administrador", "", "")
     else:
@@ -63,7 +64,7 @@ async def lifespan(app: FastAPI):
     else:
         if len(lista_participantes) > 0 and sesion_realizada == "ready":
             await enviar_mensaje(settings.DEFAULT_GROUP, settings.PREFIJO_MENSAJE + " " + respuesta["response"])
-            #pass
+            pass
         else:
             print("No se pudo enviar el mensaje. Verifica que la sesión esté activa.")
         # El yield marca la transición entre startup y shutdown
@@ -76,7 +77,7 @@ async def lifespan(app: FastAPI):
         else:
             respuesta = await chat("Apagando... genera una respuesta de despedida.", "administrador", "", "")
         if respuesta.get("error") == 'Connection error.':
-            #await enviar_mensaje(settings.DEFAULT_GROUP, settings.PREFIJO_MENSAJE + " Gemma Apagada...")  
+            await enviar_mensaje(settings.DEFAULT_GROUP, settings.PREFIJO_MENSAJE + " Gemma Apagada...")  
             await asyncio.sleep(ESPERA_SEGUNDOS)
             await detener_sesion_openwa()
             estado_conexion_openwa = False

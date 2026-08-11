@@ -155,6 +155,7 @@ consultar_internet_IA
 - sean noticias
 - actualidad
 - información posterior a tu entrenamiento
+- canciones o letrás de canciones
 
 Ejemplos:
 
@@ -181,6 +182,7 @@ Cuando uses internet:
 - responde únicamente usando la información encontrada
 - no inventes datos
 - menciona las fuentes
+- Si el usuario pregunta por una canción o letra de canción, si en la respuesta encuentras un enlace de YouTube, Spotify o Deezer, devuelvelo en la respuesta.
 
 
 # DEPORTES

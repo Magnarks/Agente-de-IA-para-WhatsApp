@@ -108,7 +108,7 @@ def registrar_webhook_openwa(estado_conexion_openwa):
     }
     parametros = {
         "url": settings.OPENWA_WEBHOOK_URL,
-        "events": ["message.received", "message.sent", "message.ack", "message.failed", "message.revoked", "message.reaction", "session.status", "session.qr", "session.authenticated", "session.disconnected", "group.join", "group.leave", "group.update", "*"],
+        "events": ["message.received", "message.sent", "message.ack", "message.failed", "message.revoked", "message.reaction", "message.edited", "session.status", "session.qr", "session.authenticated", "session.disconnected", "session.reconnect_loop", "group.join", "group.leave", "group.update", "call.received", "*"],
         "secret": settings.OPENWA_SECRET_WEBHOOK,
         "headers": {
             "X-Custom-Header": "value"
