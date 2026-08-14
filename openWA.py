@@ -209,7 +209,7 @@ async def enviar_mensaje(contact_id, mensaje, id_mensaje = None):
         payload = {
             "chatId": contact_id,
             "quotedMessageId": id_mensaje,
-            "text": mensaje
+            "text": mensaje,
             # "mentions": [m.strip() for m in settings.DEFAULT_MENTIONS_GROUP.split(",")]
         }
         try:

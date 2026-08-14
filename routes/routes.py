@@ -106,6 +106,8 @@ async def webhook(request: Request):
                     await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} No se pudo generar la respuesta de audio.", id_mensaje)
                 elif respuesta.get("response") == "imagen generada" and "image_file" in respuesta:
                     await enviar_mensaje_imagen(chat_id, respuesta["image_file"])
+                elif respuesta.get("response") == "meme generado" and "meme_file" in respuesta:
+                    await enviar_mensaje_imagen(chat_id, respuesta["meme_file"])
                 elif respuesta.get("response") == "encuesta generada" and "encuesta" in respuesta and "opciones" in respuesta:
                     encuesta = respuesta["encuesta"]
                     opciones = respuesta["opciones"]
@@ -240,6 +242,8 @@ async def webhook(request: Request):
                     await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} No se pudo generar la respuesta de audio.", id_mensaje)
                 elif respuesta.get("response") == "imagen generada" and "image_file" in respuesta:
                     await enviar_mensaje_imagen(chat_id, respuesta["image_file"])
+                elif respuesta.get("response") == "meme generado" and "meme_file" in respuesta:
+                    await enviar_mensaje_imagen(chat_id, respuesta["meme_file"])
                 elif respuesta.get("response") == "encuesta generada" and "encuesta" in respuesta and "opciones" in respuesta:
                     encuesta = respuesta["encuesta"]
                     opciones = respuesta["opciones"]
