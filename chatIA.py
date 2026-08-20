@@ -1216,6 +1216,9 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
             )
             msg = respuesta.choices[0].message
             print(f"[DEBUG] Tool calls: {msg.tool_calls}")
+            print(f"[DEBUG] content: {msg.content!r}")
+            print(f"[DEBUG] reasoning_content: {getattr(msg, 'reasoning_content', 'NO_ATTR')}")
+            print(f"[DEBUG] model_extra: {msg.model_extra}")
  
             if not msg.tool_calls:
                 contenido = msg.content or ""

@@ -36,7 +36,7 @@ else:
             print('Error al eliminar %s. Razón: %s' % (ruta_archivo, e))
 
 carpeta_prompts = os.path.join(ruta_actual, "prompts")
-archivo_prompts = os.path.join(carpeta_prompts, "System_Prompt.md")
+archivo_prompts = os.path.join(carpeta_prompts, "System_Prompt_V2.md")
 
 class Settings:
     OPENAI_API_BASE_URL: str = os.getenv("OPENAI_API_BASE_URL", "http://localhost:11434/v1")

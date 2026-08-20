@@ -43,8 +43,9 @@ async def webhook(request: Request):
         else:
             print(f"Datos del webhook: {data}")
             chat_id = data.get("chatId", "desconocido")
-            if chat_id == settings.DEFAULT_GROUP:
-                guardar_mensaje(chat_id, data)
+            for grupo in settings.DEFAULT_GROUP.split(","):
+                if chat_id == grupo:
+                    guardar_mensaje(chat_id, data)
             isGroup = data.get("isGroup", False)
             id_mensaje = data.get("id", None)
             fromMe = data.get("fromMe", False)
@@ -89,7 +90,7 @@ async def webhook(request: Request):
             if tipo_mensaje == "text" and "@gemma" in mensaje:
                 print("Procesando mensaje de chat...", id_mensaje)
                 delivery_id = payload.get("deliveryId")
-                if body_citado != "" and id_citado is not None:
+                if id_citado is not None:
                     media_citado = consultar_media_mensaje_citado(chat_id, id_citado)
                     if media_citado is not None:
                         respuesta = await chat(mensaje + " " + f"'{body_citado}'", remitente, id_remitente_grupo, chat_id, media_citado, delivery_id=delivery_id)
@@ -168,8 +169,9 @@ async def webhook(request: Request):
         else:
             print(f"Datos del webhook: {data}")
             chat_id = data.get("chatId", "desconocido")
-            if chat_id == settings.DEFAULT_GROUP:
-                guardar_mensaje(chat_id, data)
+            for grupo in settings.DEFAULT_GROUP.split(","):
+                if chat_id == grupo:
+                    guardar_mensaje(chat_id, data)
             isGroup = data.get("isGroup", False)
             id_mensaje = data.get("id", None)
             fromMe = data.get("fromMe", False)
@@ -177,12 +179,11 @@ async def webhook(request: Request):
             print(f"¿Es grupo?: {isGroup}")
 
             if isGroup:
-                id_remitente = data.get("author", "desconocido")
-                print(f"ID del remitente: {id_remitente}")
-                info_contacto = obtener_informacion_contacto(id_remitente)
-                print(f"Información del contacto: {info_contacto}")
                 id_remitente_grupo = data.get("from", "desconocido")
-                info_grupo = obtener_informacion_grupo(id_remitente_grupo)
+                print(f"ID del remitente: {id_remitente_grupo}")
+                info_contacto = obtener_informacion_contacto(id_remitente_grupo)
+                print(f"Información del contacto: {info_contacto}")
+                info_grupo = obtener_informacion_grupo(chat_id)
                 print(f"Información del grupo: {info_grupo}")
                 #id_remitente_grupo = id_remitente_grupo.split("_")[3]
                 # id_destinatario = data.get("to", "desconocido")
@@ -225,7 +226,7 @@ async def webhook(request: Request):
             if tipo_mensaje == "text" and "@gemma" in mensaje:
                 print("Procesando mensaje de chat...", id_mensaje)
                 delivery_id = payload.get("deliveryId")
-                if body_citado != "" and id_citado is not None:
+                if id_citado is not None:
                     media_citado = consultar_media_mensaje_citado(chat_id, id_citado)
                     if media_citado is not None:
                         respuesta = await chat(mensaje + " " + f"'{body_citado}'", remitente, id_remitente_grupo, chat_id, media_citado, delivery_id=delivery_id)
