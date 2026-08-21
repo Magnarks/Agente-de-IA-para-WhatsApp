@@ -2,6 +2,54 @@ import requests
 import json
 from config import settings
 import base64
+import re
+
+PATRON_MENCION = re.compile(r'@(\d{8,15})\b')
+ 
+ 
+def extraer_menciones(mensaje: str):
+    """
+    Busca patrones tipo '@259158460874820' en el texto y devuelve la
+    lista de JIDs completos para el campo 'mentions' de la API de
+    OpenWA, ej: ['259158460874820@lid', ...]. Sin duplicados.
+    """
+    numeros = PATRON_MENCION.findall(mensaje or "")
+    vistos = []
+    for n in numeros:
+        jid = f"{n}@lid"
+        if jid not in vistos:
+            vistos.append(jid)
+    print(f"Menciones extraídas del mensaje: {mensaje} -> {vistos}")
+    return vistos
+ 
+ 
+# Y en enviar_mensaje, para AMBOS endpoints (reply y send-text),
+# reemplaza el payload así:
+ 
+def _payload_con_menciones(chat_id_o_contact, mensaje, quoted_message_id=None):
+    mentions = extraer_menciones(mensaje)
+    # WhatsApp requires @number without @lid/@s.whatsapp.net suffix in the text
+    texto_limpio = re.sub(r'(@\d{8,15})@\S+', r'\1', mensaje)
+    payload = {"chatId": chat_id_o_contact, "text": texto_limpio}
+    if quoted_message_id:
+        payload["quotedMessageId"] = quoted_message_id
+    if mentions:
+        payload["mentions"] = mentions
+    print(f"Payload a enviar: {json.dumps(payload, indent=2)}")
+    return payload
+ 
+# Uso:
+#   payload = _payload_con_menciones(contact_id, mensaje, id_mensaje)
+# reemplaza los payload={...} hardcodeados en ambos bloques (if/else)
+# de tu función enviar_mensaje.
+#
+# Ventajas sobre lo que tenías:
+# - Ya no depende de settings.DEFAULT_MENTIONS_GROUP (puedes eliminar
+#   esa variable del .env si quieres, o dejarla sin usar).
+# - Si el mensaje no menciona a nadie, 'mentions' ni siquiera se manda
+#   (algunas APIs de WhatsApp son quisquillosas con arrays vacíos).
+# - Funciona igual en tu chat de pruebas, porque no consulta ninguna
+#   colección de Mongo — solo lee el texto que ya vas a enviar.
 
 async def iniciar_sesion_openwa():
     api_url = f"{settings.OPENWA_BASE_URL}/api/sessions/{settings.OPENWA_SESSION_ID}/start"
@@ -206,12 +254,13 @@ async def enviar_mensaje(contact_id, mensaje, id_mensaje = None):
             "Accept": "*/*",
             "Authorization": f"Bearer {settings.OPENWA_API_TOKEN}",
         }
-        payload = {
-            "chatId": contact_id,
-            "quotedMessageId": id_mensaje,
-            "text": mensaje,
-            # "mentions": [m.strip() for m in settings.DEFAULT_MENTIONS_GROUP.split(",")]
-        }
+        # payload = {
+        #     "chatId": contact_id,
+        #     "quotedMessageId": id_mensaje,
+        #     "text": mensaje,
+        #     # "mentions": [m.strip() for m in settings.DEFAULT_MENTIONS_GROUP.split(",")]
+        # }
+        payload = _payload_con_menciones(contact_id, mensaje, id_mensaje)
         try:
             response = requests.post(api_url, headers=headers, json=payload)
             if response.status_code == 200 or response.status_code == 201:
@@ -231,11 +280,12 @@ async def enviar_mensaje(contact_id, mensaje, id_mensaje = None):
             "Accept": "*/*",
             "Authorization": f"Bearer {settings.OPENWA_API_TOKEN}",
         }
-        payload = {
-            "chatId": contact_id,
-            "text": mensaje,
-            "mentions": [m.strip() for m in settings.DEFAULT_MENTIONS_GROUP.split(",")]
-        }
+        # payload = {
+        #     "chatId": contact_id,
+        #     "text": mensaje,
+        #     "mentions": [m.strip() for m in settings.DEFAULT_MENTIONS_GROUP.split(",")]
+        # }
+        payload = _payload_con_menciones(contact_id, mensaje)
         try:
             response = requests.post(api_url, headers=headers, json=payload)
             if response.status_code == 200 or response.status_code == 201:

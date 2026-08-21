@@ -7,7 +7,7 @@ import os
 import subprocess
 import base64
 from tavily import TavilyClient, TavilyKeylessLimitError
-from database_chatbot import consultar_mensajes, consultar_memorias, guardar_memoria
+from database_chatbot import consultar_mensajes, consultar_memorias, guardar_memoria, consultar_usuarios_grupo
 from generador_imagenes import generar_imagen
 from generador_memes import generar_meme_bytes
 import whisper
@@ -995,7 +995,39 @@ herramientas = [
 
 MAX_ITERACIONES_TOOLS = 3  # límite de seguridad para evitar loops infinitos
  
+def construir_mensaje_miembros(chat_id):
+    """
+    Devuelve un mensaje 'system' con el mapeo Nombre -> lid del grupo,
+    o None si no aplica (chat_id vacío, es un chat privado, o no hay
+    miembros registrados en la BD para ese chat).
+    """
+    if not chat_id:
+        return None
  
+    miembros = consultar_usuarios_grupo(chat_id)
+    if not miembros:
+        return None
+ 
+    lineas = []
+    for m in miembros:
+        nombre = m.get("name") or m.get("pushName") or "desconocido"
+        lid = m.get("lid")
+        if lid:
+            lineas.append(f"- {nombre}: {lid}")
+ 
+    if not lineas:
+        return None
+ 
+    contenido = (
+        "Miembros del grupo (Nombre: lid). Usa este valor EXACTO de lid "
+        "cada vez que quieras mencionar a alguien en tu respuesta, en "
+        "cualquier momento de la conversación (no solo al saludar). "
+        "Nunca uses el número de teléfono, nunca inventes el lid.\n"
+        + "\n".join(lineas)
+    )
+    return {"role": "system", "content": contenido}
+
+
 async def ejecutar_tool(tool_name, tool_args, contexto):
     """
     Ejecuta una tool y devuelve (resultado, respuesta_temprana).
@@ -1144,11 +1176,21 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
  
     # Actualizar fecha y recargar memorias cada RECARGAR_CADA llamadas
     contador_llamadas[usuario] = contador_llamadas.get(usuario, 0) + 1
+
+    # --- FECHA: se actualiza SIEMPRE, en cada llamada, sin importar
+    # RECARGAR_CADA. Es barato (no toca BD) y evita que conversaciones
+    # de pocas llamadas (como "administrador", que solo recibe 2 en
+    # toda su vida: startup y shutdown) queden con la hora congelada
+    # desde el arranque del proceso.
+    for i, msg in enumerate(historial_conversacion[usuario]):
+        if msg.get("role") == "system" and "Fecha actual:" in msg.get("content", ""):
+            historial_conversacion[usuario][i]["content"] = f"Fecha actual: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            break
+
+    # --- MEMORIAS: esta sí se queda detrás de RECARGAR_CADA, porque
+    # implica una consulta a la base de datos y no tiene sentido
+    # pegarle a Mongo en cada mensaje.
     if contador_llamadas[usuario] % RECARGAR_CADA == 0:
-        for i, msg in enumerate(historial_conversacion[usuario]):
-            if msg.get("role") == "system" and "Fecha actual:" in msg.get("content", ""):
-                historial_conversacion[usuario][i]["content"] = f"Fecha actual: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-                break
         memorias_actualizadas = consultar_memorias(usuario, id_usuario)
         if memorias_actualizadas:
             contenido_memorias = "\n".join([f"- [{m['fecha']}] {m['memoria']}" for m in memorias_actualizadas])
@@ -1159,6 +1201,17 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
                 historial_conversacion[usuario][idx_memorias] = nuevo_msg
             else:
                 historial_conversacion[usuario].insert(2, nuevo_msg)
+
+        texto_miembros_actualizado = construir_mensaje_miembros(chat_id)
+        if texto_miembros_actualizado:
+            nuevo_msg_miembros = {"role": "system", "content": texto_miembros_actualizado}
+            idx_miembros = next((i for i, msg in enumerate(historial_conversacion[usuario])
+                                 if msg.get("role") == "system" and "Miembros del grupo" in msg.get("content", "")), None)
+            if idx_miembros is not None:
+                historial_conversacion[usuario][idx_miembros] = nuevo_msg_miembros
+            else:
+                historial_conversacion[usuario].insert(2, nuevo_msg_miembros)
+
         print(f"[INFO] Memorias y fecha actualizadas para {usuario} (llamada #{contador_llamadas[usuario]})")
  
     if b64 is None:

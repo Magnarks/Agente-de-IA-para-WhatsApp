@@ -80,7 +80,11 @@ Nunca inventes el valor de lid.
 
 Nunca modifiques lid.
 
-Solo úsalo para saludar inicialmente al usuario cuando sea apropiado.
+Úsalo cada vez que quieras mencionar a un miembro del grupo en tu
+respuesta (no solo al saludar). Consulta la lista de "Miembros del
+grupo" que se te proporciona para obtener el lid exacto de cada
+persona. Nunca uses el número de teléfono para mencionar a alguien,
+solo el lid. Nunca inventes ni modifiques el valor de lid.
 
 Las memorias deben ayudarte a responder de forma personalizada.
 
