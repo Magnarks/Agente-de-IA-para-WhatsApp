@@ -115,7 +115,11 @@ async def webhook(request: Request):
                     multiple = respuesta.get("multiple", False)
                     await enviar_encuesta(chat_id, encuesta, opciones, multiple)
                 else:
-                    await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} {respuesta['response']}", id_mensaje)
+                    if "error" in respuesta:
+                        print(f"[WARN] Error al generar respuesta: {respuesta['error']}")
+                        # decide qué hacer: no enviar nada, o enviar un mensaje genérico de error
+                    else:
+                        await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} {respuesta['response']}", id_mensaje)
                 return {
                     "status": "ok",
                     "response": respuesta
@@ -133,7 +137,11 @@ async def webhook(request: Request):
                     elif respuesta.get("response") == "audio generado":
                         await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} No se pudo generar la respuesta de audio.", id_mensaje)
                     else:
-                        await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} {respuesta['response']}", id_mensaje)
+                        if "error" in respuesta:
+                            print(f"[WARN] Error al generar respuesta: {respuesta['error']}")
+                            # decide qué hacer: no enviar nada, o enviar un mensaje genérico de error
+                        else:
+                            await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} {respuesta['response']}", id_mensaje)
                     return {
                         "status": "ok",
                         "response": respuesta
@@ -158,7 +166,11 @@ async def webhook(request: Request):
                         multiple = respuesta.get("multiple", False)
                         await enviar_encuesta(chat_id, encuesta, opciones, multiple)
                     if respuesta["response"] != "No se pudo obtener el tipo de archivo.":
-                        await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} {respuesta['response']}", id_mensaje)
+                        if "error" in respuesta:
+                            print(f"[WARN] Error al generar respuesta: {respuesta['error']}")
+                            # decide qué hacer: no enviar nada, o enviar un mensaje genérico de error
+                        else:
+                            await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} {respuesta['response']}", id_mensaje)
                 else:
                     return {"status": "error", "message": "No se pudo obtener los medios del mensaje."}                    
     elif evento == "message.sent":
@@ -251,7 +263,11 @@ async def webhook(request: Request):
                     multiple = respuesta.get("multiple", False)
                     await enviar_encuesta(chat_id, encuesta, opciones, multiple)
                 else:
-                    await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} {respuesta['response']}", id_mensaje)
+                    if "error" in respuesta:
+                        print(f"[WARN] Error al generar respuesta: {respuesta['error']}")
+                        # decide qué hacer: no enviar nada, o enviar un mensaje genérico de error
+                    else:
+                        await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} {respuesta['response']}", id_mensaje)
                 return {
                     "status": "ok",
                     "response": respuesta
@@ -269,7 +285,11 @@ async def webhook(request: Request):
                     elif respuesta.get("response") == "audio generado":
                         await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} No se pudo generar la respuesta de audio.", id_mensaje)
                     else:
-                        await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE}{respuesta['response']}", id_mensaje)
+                        if "error" in respuesta:
+                            print(f"[WARN] Error al generar respuesta: {respuesta['error']}")
+                            # decide qué hacer: no enviar nada, o enviar un mensaje genérico de error
+                        else:
+                            await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} {respuesta['response']}", id_mensaje)
                     return {
                         "status": "ok",
                         "response": respuesta
@@ -294,7 +314,11 @@ async def webhook(request: Request):
                         multiple = respuesta.get("multiple", False)
                         await enviar_encuesta(chat_id, encuesta, opciones, multiple)
                     if respuesta["response"] != "No se pudo obtener el tipo de archivo.":
-                        await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} {respuesta['response']}", id_mensaje)
+                        if "error" in respuesta:
+                            print(f"[WARN] Error al generar respuesta: {respuesta['error']}")
+                            # decide qué hacer: no enviar nada, o enviar un mensaje genérico de error
+                        else:
+                            await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} {respuesta['response']}", id_mensaje)
                 else:
                     return {"status": "error", "message": "No se pudo obtener los medios del mensaje."}    
     else:

@@ -3,38 +3,88 @@ import json
 from config import settings
 import base64
 import re
+from database_chatbot import consultar_usuarios_grupo
 
 PATRON_MENCION = re.compile(r'@(\d{8,15})\b')
+
+ALIAS_RESERVADOS = {"gemma"}
  
+def construir_mapa_menciones(miembros):
+    """
+    A partir de la lista de miembros (la que ya te da
+    consultar_usuarios_grupo), arma pares (alias, lid_numero),
+    ordenados por longitud de alias descendente (para que el regex
+    haga match greedy y no corte 'Nicole Vargas' como si fuera solo
+    'Nicole' antes de intentar el nombre completo).
  
-def extraer_menciones(mensaje: str):
+    Cada persona genera 2 alias posibles: su nombre completo y su
+    primer nombre, así el modelo puede escribir cualquiera de los dos
+    y de todas formas resuelve al lid correcto.
     """
-    Busca patrones tipo '@259158460874820' en el texto y devuelve la
-    lista de JIDs completos para el campo 'mentions' de la API de
-    OpenWA, ej: ['259158460874820@lid', ...]. Sin duplicados.
+    alias_map = []
+    for m in miembros:
+        lid_raw = (m.get("lid") or "").lstrip("@")
+        if not lid_raw:
+            continue
+ 
+        nombre = (m.get("name") or m.get("pushName") or "").strip()
+        if not nombre:
+            continue
+ 
+        primer_nombre = nombre.split()[0]
+ 
+        for alias in {nombre, primer_nombre}:
+            if alias.lower() in ALIAS_RESERVADOS:
+                continue
+            alias_map.append((alias, lid_raw))
+ 
+    alias_map.sort(key=lambda par: len(par[0]), reverse=True)
+    return alias_map
+
+
+def reemplazar_menciones(texto: str, miembros):
     """
-    numeros = PATRON_MENCION.findall(mensaje or "")
-    vistos = []
-    for n in numeros:
-        jid = f"{n}@lid"
-        if jid not in vistos:
-            vistos.append(jid)
-    print(f"Menciones extraídas del mensaje: {mensaje} -> {vistos}")
-    return vistos
+    Busca '@Alias' en el texto que generó el modelo y lo reemplaza por
+    '@<lid_real>', tomado de la base de datos (no del texto del
+    modelo). Devuelve (texto_corregido, mentions) listo para mandarle
+    a la API de OpenWA.
+ 
+    '@clau' (y cualquier alias en ALIAS_RESERVADOS) se deja intacto,
+    tal cual lo escribió el modelo — sigue funcionando como
+    disparador textual, no como mention real de WhatsApp.
+    """
+    alias_map = construir_mapa_menciones(miembros)
+    mentions = []
+ 
+    for alias, lid in alias_map:
+        patron = re.compile(rf'@{re.escape(alias)}\b', re.IGNORECASE)
+        if patron.search(texto):
+            texto = patron.sub(f'@{lid}', texto)
+            jid = f"{lid}@lid"
+            if jid not in mentions:
+                mentions.append(jid)
+ 
+    return texto, mentions
  
  
 # Y en enviar_mensaje, para AMBOS endpoints (reply y send-text),
 # reemplaza el payload así:
  
-def _payload_con_menciones(chat_id_o_contact, mensaje, quoted_message_id=None):
-    mentions = extraer_menciones(mensaje)
-    # WhatsApp requires @number without @lid/@s.whatsapp.net suffix in the text
-    texto_limpio = re.sub(r'(@\d{8,15})@\S+', r'\1', mensaje)
-    payload = {"chatId": chat_id_o_contact, "text": texto_limpio}
+def _payload_con_menciones(chat_id, mensaje, quoted_message_id=None):
+    """
+    Sustituye '@Nombre' por '@lid' real (tomado de la BD) y arma el
+    payload final para OpenWA. chat_id se usa tanto para el envío
+    como para buscar los miembros del grupo (son el mismo valor).
+    """
+    miembros = consultar_usuarios_grupo(chat_id)
+    texto_final, mentions = reemplazar_menciones(mensaje, miembros)
+ 
+    payload = {"chatId": chat_id, "text": texto_final}
     if quoted_message_id:
         payload["quotedMessageId"] = quoted_message_id
     if mentions:
         payload["mentions"] = mentions
+ 
     print(f"Payload a enviar: {json.dumps(payload, indent=2)}")
     return payload
  
@@ -345,7 +395,7 @@ async def enviar_mensaje_audio(contact_id, audio_file_path):
         print(f"Error en la solicitud: {e}")
         return False
     
-async def enviar_mensaje_imagen(contact_id, base64_image):
+async def enviar_mensaje_imagen(contact_id, base64_image, mensaje=""):
 
     print(f"Preparando para enviar el mensaje de imagen al contacto: {contact_id}")
 
@@ -367,6 +417,7 @@ async def enviar_mensaje_imagen(contact_id, base64_image):
         "chatId": contact_id,
         "base64": base64_image,
         "mimetype": "image/jpeg",
+        "caption": mensaje
     }
     # payload = {
     #     "chatId": contact_id,

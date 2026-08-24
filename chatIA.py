@@ -657,6 +657,68 @@ def consultar_partido_deportivo_en_vivo_IA(partido: str):
         return {"error": "Error en la solicitud."}
     
 
+# mimetypes aceptados como documentos procesables
+_MIMETYPES_DOCUMENTO = {
+    "application/pdf",
+    "text/plain",
+    "text/csv",
+    "application/json",
+    "application/xml",
+    "text/xml",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/msword",
+}
+
+def extraer_texto_documento(doc_bytes: bytes, mimetype: str, filename: str = "") -> str:
+    ext = filename.rsplit(".", 1)[-1].lower() if filename and "." in filename else ""
+
+    if mimetype in ("text/plain", "text/csv", "application/json", "application/xml", "text/xml") or ext in ("txt", "csv", "json", "xml"):
+        for enc in ("utf-8", "latin-1"):
+            try:
+                return doc_bytes.decode(enc)
+            except UnicodeDecodeError:
+                continue
+        return doc_bytes.decode("utf-8", errors="replace")
+
+    if mimetype == "application/pdf" or ext == "pdf":
+        try:
+            import pdfplumber, io
+            with pdfplumber.open(io.BytesIO(doc_bytes)) as pdf:
+                return "\n".join(page.extract_text() or "" for page in pdf.pages)
+        except ImportError:
+            pass
+        try:
+            import pypdf, io
+            reader = pypdf.PdfReader(io.BytesIO(doc_bytes))
+            return "\n".join(page.extract_text() or "" for page in reader.pages)
+        except ImportError:
+            return "[PDF no soportado: instala pdfplumber o pypdf]"
+
+    if mimetype == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" or ext == "docx":
+        try:
+            import docx, io
+            doc = docx.Document(io.BytesIO(doc_bytes))
+            return "\n".join(p.text for p in doc.paragraphs)
+        except ImportError:
+            return "[DOCX no soportado: instala python-docx]"
+
+    if mimetype == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" or ext == "xlsx":
+        try:
+            import openpyxl, io
+            wb = openpyxl.load_workbook(io.BytesIO(doc_bytes), data_only=True)
+            lines = []
+            for sheet in wb.worksheets:
+                lines.append(f"[Hoja: {sheet.title}]")
+                for row in sheet.iter_rows(values_only=True):
+                    lines.append("\t".join("" if v is None else str(v) for v in row))
+            return "\n".join(lines)
+        except ImportError:
+            return "[XLSX no soportado: instala openpyxl]"
+
+    return f"[Tipo de documento no soportado: {mimetype}]"
+
+
 async def transcribir_con_whisper_local(wav_bytes):
     """Transcribe WAV bytes usando Whisper local."""
     # Guardar en archivo temporal
@@ -1019,10 +1081,10 @@ def construir_mensaje_miembros(chat_id):
         return None
  
     contenido = (
-        "Miembros del grupo (Nombre: lid). Usa este valor EXACTO de lid "
+        "Miembros del grupo (Nombre). Usa este valor "
         "cada vez que quieras mencionar a alguien en tu respuesta, en "
         "cualquier momento de la conversación (no solo al saludar). "
-        "Nunca uses el número de teléfono, nunca inventes el lid.\n"
+        "Nunca uses el número de teléfono, nunca inventes el nombre.\n"
         + "\n".join(lineas)
     )
     return {"role": "system", "content": contenido}
@@ -1238,6 +1300,19 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
                     return {"response": "No se pudo procesar el audio, o No se llamo a gemma en el mensaje."}
             else:
                 return {"response": "No se pudo procesar el audio."}
+        elif tipo_b64 in _MIMETYPES_DOCUMENTO:
+            doc_bytes_data = base64.b64decode(b64.get('data', ''))
+            filename = b64.get('filename') or b64.get('name') or ''
+            texto_doc = extraer_texto_documento(doc_bytes_data, tipo_b64, filename)
+            MAX_CHARS_DOC = 12000
+            if len(texto_doc) > MAX_CHARS_DOC:
+                texto_doc = texto_doc[:MAX_CHARS_DOC] + "\n[... documento truncado ...]"
+            prefijo = f"{mensaje}\n\n" if mensaje and mensaje.strip() else ""
+            nombre_doc = filename or tipo_b64
+            historial_conversacion[usuario].append({
+                "role": "user",
+                "content": f"{prefijo}[Documento: {nombre_doc}]\n{texto_doc}"
+            })
         else:
             return {"response": "No se pudo obtener el tipo de archivo."}
  
@@ -1280,7 +1355,7 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
  
             historial_conversacion[usuario].append({
                 "role": "assistant",
-                "content": msg.content,
+                "content": msg.content or "",
                 "tool_calls": [
                     {
                         "id": tc.id,

@@ -55,9 +55,9 @@ async def lifespan(app: FastAPI):
             lista_participantes = participantes
             print(f"Participantes del grupo {settings.DEFAULT_GROUP.split(',')[0]}: {lista_participantes}")
     if len(lista_participantes) > 0 and sesion_realizada == "ready":
-        respuesta = await chat(f"iniciando... en tu respuesta si es posible di la fecha actual y si encuentras participantes del grupo saludalos usando su lid (esto hace que se mencionen como un mensaje de WhatsApp, IMPORTANTE NUNCA INVENTES O MODIFIQUES EL VALOR ESTE YA ESTA CARGADO DESDE BASE DE DATOS) y según la hora en el saludo menciona buenos días, buenas tardes o buenas noches. Los participantes están en esta lista de Python: {lista_participantes}. también saluda a @clau", "administrador", "", "")
+        respuesta = await chat(f"Iniciando... en tu respuesta si es posible di la fecha actual y si encuentras participantes del grupo saludalos mencionando su nombre con @ (ej: @Diego, @Nicole), y según la hora en el saludo menciona buenos días, buenas tardes o buenas noches. Los participantes son: {[m.get('name') or m.get('pushName') for m in lista_participantes]}. también saluda a @clau", "administrador", "", "")
     else:
-        respuesta = await chat("iniciando... en tu respuesta si es posible di la fecha actual.", "administrador", "", "")
+        respuesta = await chat("Iniciando... en tu respuesta si es posible di la fecha actual.", "administrador", "", "")
     print(f"Respuesta del chatbot al iniciar: {respuesta}")
     if respuesta.get("error") == 'Connection error.':
         print('No se inicializo modelo de IA')
@@ -73,7 +73,7 @@ async def lifespan(app: FastAPI):
     print("Cerrando aplicación...")
     if estado_conexion_openwa and sesion_realizada == "ready":
         if len(lista_participantes) > 0 and sesion_realizada == "ready":
-            respuesta = await chat(f"Apagando... si encuentras participantes del grupo despídete usando su lid (esto hace que se mencionen como un mensaje de WhatsApp, IMPORTANTE NUNCA INVENTES O MODIFIQUES EL VALOR ESTE YA ESTA CARGADO DESDE BASE DE DATOS) y según la hora en la que se encuentren menciona buenos días, buenas tardes o buenas noches. Los participantes están en esta lista de Python: {lista_participantes}, también despidete de @clau", "administrador", "", "")
+            respuesta = await chat(f"Apagando... en tu respuesta si es posible di la fecha actual y si encuentras participantes del grupo despídete mencionando su nombre con @ (ej: @Diego, @Nicole), y según la hora en el saludo menciona buenos días, buenas tardes o buenas noches. Los participantes son: {[m.get('name') or m.get('pushName') for m in lista_participantes]}. también despídete de @clau", "administrador", "", "")
         else:
             respuesta = await chat("Apagando... genera una respuesta de despedida.", "administrador", "", "")
         if respuesta.get("error") == 'Connection error.':
