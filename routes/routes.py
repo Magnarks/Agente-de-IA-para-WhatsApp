@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request, HTTPException
 from config import settings
 import threading
-from chatIA import chat
+from chatIA import chat, sanitizar_texto_previo
 from openWA import obtener_informacion_contacto, obtener_informacion_grupo, enviar_mensaje, enviar_mensaje_audio, reaccionar_mensaje, enviar_mensaje_imagen, enviar_encuesta
 from database_chatbot import guardar_mensaje, consultar_media_mensaje_citado
 
@@ -82,7 +82,7 @@ async def webhook(request: Request):
 
             if mensaje_citado is not None:
                 id_citado = mensaje_citado.get("id", None)
-                body_citado = mensaje_citado.get("body", "")
+                body_citado = sanitizar_texto_previo(mensaje_citado.get("body", ""), mensaje_citado.get("type"))
             else:
                 id_citado = None
                 body_citado = ""
@@ -106,9 +106,9 @@ async def webhook(request: Request):
                 elif respuesta.get("response") == "audio generado":
                     await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} No se pudo generar la respuesta de audio.", id_mensaje)
                 elif respuesta.get("response") == "imagen generada" and "image_file" in respuesta:
-                    await enviar_mensaje_imagen(chat_id, respuesta["image_file"])
+                    await enviar_mensaje_imagen(chat_id, respuesta["image_file"], f"{settings.PREFIJO_MENSAJE} {respuesta.get("caption", "")}")
                 elif respuesta.get("response") == "meme generado" and "meme_file" in respuesta:
-                    await enviar_mensaje_imagen(chat_id, respuesta["meme_file"])
+                    await enviar_mensaje_imagen(chat_id, respuesta["meme_file"], f"{settings.PREFIJO_MENSAJE} {respuesta.get("caption", "")}")
                 elif respuesta.get("response") == "encuesta generada" and "encuesta" in respuesta and "opciones" in respuesta:
                     encuesta = respuesta["encuesta"]
                     opciones = respuesta["opciones"]
@@ -230,7 +230,7 @@ async def webhook(request: Request):
 
             if mensaje_citado is not None:
                 id_citado = mensaje_citado.get("id", None)
-                body_citado = mensaje_citado.get("body", "")
+                body_citado = sanitizar_texto_previo(mensaje_citado.get("body", ""), mensaje_citado.get("type"))
             else:
                 id_citado = None
                 body_citado = ""
@@ -254,9 +254,9 @@ async def webhook(request: Request):
                 elif respuesta.get("response") == "audio generado":
                     await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} No se pudo generar la respuesta de audio.", id_mensaje)
                 elif respuesta.get("response") == "imagen generada" and "image_file" in respuesta:
-                    await enviar_mensaje_imagen(chat_id, respuesta["image_file"])
+                    await enviar_mensaje_imagen(chat_id, respuesta["image_file"], f"{settings.PREFIJO_MENSAJE} {respuesta.get('caption', '')}")
                 elif respuesta.get("response") == "meme generado" and "meme_file" in respuesta:
-                    await enviar_mensaje_imagen(chat_id, respuesta["meme_file"])
+                    await enviar_mensaje_imagen(chat_id, respuesta["meme_file"], f"{settings.PREFIJO_MENSAJE} {respuesta.get('caption', '')}")
                 elif respuesta.get("response") == "encuesta generada" and "encuesta" in respuesta and "opciones" in respuesta:
                     encuesta = respuesta["encuesta"]
                     opciones = respuesta["opciones"]

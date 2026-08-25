@@ -976,7 +976,9 @@ herramientas = [
         "type": "function",
         "function": {
             "name": "pedir_imagen_IA",
-            "description": "Genera una imagen basada en la descripción proporcionada por el usuario. Utilizar cuando el usuario solicite una imagen, foto, ilustración, dibujo, arte o cualquier representación visual. Traduce la descripción o prompt a inglés, esto con el fin de mejorar la precisión.",
+            "description": """Genera una imagen basada en la descripción proporcionada por el usuario. Utilizar cuando el usuario solicite una imagen, foto, ilustración, dibujo, arte o cualquier representación visual. Traduce la descripción o prompt a inglés, esto con el fin de mejorar la precisión.
+                            IMPORTANTE: junto con esta llamada, escribe SIEMPRE un mensaje de texto corto (en el mismo turno, como contenido de tu respuesta) que acompañe la imagen; ese texto se enviará como caption/pie de foto junto a la imagen generada. No dejes el mensaje vacío.
+                            """,
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -1003,6 +1005,7 @@ herramientas = [
             "description": """Genera un meme basado en la plantilla y el texto o textos proporcionados por el usuario. Utilizar cuando el usuario solicite un meme, imagen divertida, broma visual o cualquier representación humorística. Igualmente tu puedes usar esta función si lo consideras conveniente para responder, en ese caso usa una plantilla de meme que consideres oportuna con texto que igual consideres indicado.
                             Consulta la función listar_plantillas_memes_IA para conocer las plantillas de memes disponibles, sus nombres y sus identificadores (el identificador es el que se debe de usar para la función generar_meme_IA).
                             Recuerda que siempre debes usar la función listar_plantillas_memes_IA antes de llamar a esta para conocer que plantillas puedes usar. NO inventes plantillas.
+                            IMPORTANTE: junto con esta llamada, escribe SIEMPRE un mensaje de texto corto (en el mismo turno, como contenido de tu respuesta) que acompañe el meme; ese texto se enviará como caption/pie de foto junto al meme generado. No dejes el mensaje vacío.
                             """,
             "parameters": {
                 "type": "object",
@@ -1056,7 +1059,21 @@ herramientas = [
 ]
 
 MAX_ITERACIONES_TOOLS = 3  # límite de seguridad para evitar loops infinitos
- 
+
+# Tipos de mensaje de WhatsApp cuyo 'body' no es texto legible (stickers,
+# medios, etc.) y puede venir como blob binario/base64 gigante.
+_TIPOS_MENSAJE_NO_TEXTO = {"sticker", "image", "video", "audio", "ptt", "document", "vcard", "location"}
+
+def sanitizar_texto_previo(body: str, tipo: str = None, max_len: int = 400) -> str:
+    """Evita inyectar blobs binarios/base64 (stickers, medios) en el contexto del modelo."""
+    if not body:
+        return ""
+    if tipo and tipo.lower() in _TIPOS_MENSAJE_NO_TEXTO:
+        return f"[{tipo}]"
+    if len(body) > max_len:
+        return body[:max_len] + "... [contenido truncado]"
+    return body
+
 def construir_mensaje_miembros(chat_id):
     """
     Devuelve un mensaje 'system' con el mapeo Nombre -> lid del grupo,
@@ -1162,6 +1179,8 @@ async def ejecutar_tool(tool_name, tool_args, contexto):
                 "response": "imagen generada",
                 "image_file": resultado_imagen["artifacts"][0]["base64"],
             }
+            if contexto.get("texto_respuesta"):
+                response_data["caption"] = contexto["texto_respuesta"]
             if contexto.get("reaccion_emoji"):
                 response_data["emoji"] = contexto["reaccion_emoji"]
             return resultado_imagen, response_data
@@ -1179,6 +1198,8 @@ async def ejecutar_tool(tool_name, tool_args, contexto):
                 "meme_file": base64.b64encode(resultado_meme).decode("utf-8"),
             }
             print("Meme generado:", response_data["meme_file"][:30], "...")  # Mostrar solo los primeros 30 caracteres
+            if contexto.get("texto_respuesta"):
+                response_data["caption"] = contexto["texto_respuesta"]
             if contexto.get("reaccion_emoji"):
                 response_data["emoji"] = contexto["reaccion_emoji"]
             return resultado_meme, response_data
@@ -1210,6 +1231,29 @@ async def ejecutar_tool(tool_name, tool_args, contexto):
  
     return "Función no reconocida", None
 
+async def generar_caption_imagen_IA(usuario):
+    """Pide al modelo un texto corto para acompañar la imagen/meme recién generado.
+    Necesario porque el modelo no puede devolver content + tool_calls a la vez,
+    por lo que el caption se pide en una llamada aparte, sin tools disponibles.
+    """
+    try:
+        mensajes_temp = historial_conversacion[usuario] + [{
+            "role": "user",
+            "content": "Escribe un mensaje breve y natural (sin comillas) para acompañar la imagen que acabas de generar, como si fuera el pie de foto. Responde solo con ese texto."
+        }]
+        respuesta = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=mensajes_temp,
+            tools=herramientas,
+            tool_choice="none"
+        )
+        caption = respuesta.choices[0].message.content or ""
+        caption, _ = limpiar_tool_calls_texto(caption)
+        return caption
+    except Exception as e:
+        print(f"[WARN] No se pudo generar caption: {e}")
+        return ""
+
 async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delivery_id=None):
     usuario = remitente
     id_usuario = id_remitente_grupo
@@ -1229,7 +1273,7 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
         # Cargar contexto mensajes previos del chat
         mensajes_previos = consultar_mensajes(chat_id, 10)  # Obtener los últimos 10 mensajes del chat
         if mensajes_previos:
-            contenido_mensajes = "\n".join([f"- [{m.get('timestamp', '')}] {m.get('author', m.get('from', 'desconocido'))}: {m.get('body', '')}" for m in mensajes_previos])
+            contenido_mensajes = "\n".join([f"- [{m.get('timestamp', '')}] {m.get('author', m.get('from', 'desconocido'))}: {sanitizar_texto_previo(m.get('body', ''), m.get('type'))}" for m in mensajes_previos])
             historial_conversacion[usuario].append({
                 "role": "system",
                 "content": f"Mensajes previos del chat:\n{contenido_mensajes}"
@@ -1277,6 +1321,9 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
         print(f"[INFO] Memorias y fecha actualizadas para {usuario} (llamada #{contador_llamadas[usuario]})")
  
     if b64 is None:
+        # salvaguarda: nunca dejar crecer el contexto indefinidamente con un solo mensaje
+        if len(mensaje) > 4000:
+            mensaje = mensaje[:4000] + "... [contenido truncado]"
         historial_conversacion[usuario].append({"role": "user", "content": mensaje})
     else:
         tipo_b64 = b64.get('mimetype', None)
@@ -1330,6 +1377,7 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
             "chat_id": chat_id,
             "delivery_id": delivery_id,
             "reaccion_emoji": None,
+            "texto_respuesta": None,
         }
  
         contenido = ""
@@ -1352,6 +1400,9 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
                 contenido = msg.content or ""
                 agoto_iteraciones = False
                 break
+ 
+            # texto que el modelo escribió junto al tool call (posible caption)
+            contexto["texto_respuesta"] = msg.content or ""
  
             historial_conversacion[usuario].append({
                 "role": "assistant",
@@ -1406,6 +1457,10 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
                 })
  
             if respuesta_temprana is not None:
+                if isinstance(respuesta_temprana, dict) and ("image_file" in respuesta_temprana or "meme_file" in respuesta_temprana) and not respuesta_temprana.get("caption"):
+                    caption = await generar_caption_imagen_IA(usuario)
+                    if caption:
+                        respuesta_temprana["caption"] = caption
                 return respuesta_temprana
             # si no hubo corte anticipado, se vuelve a llamar al modelo
             # (con los resultados de las tools ya en el historial)

@@ -421,6 +421,8 @@ Si la descripción es pobre puedes mejorar el prompt antes de llamar la herramie
 
 Traduce la descripción o prompt a inglés, esto con el fin de mejorar la precisión.
 
+Siempre que llames a pedir_imagen_IA, escribe también un mensaje de texto corto en esa misma respuesta (no lo dejes vacío). Ese texto se enviará como caption/pie de foto junto a la imagen generada, así que debe ser una frase breve relacionada con la imagen o con lo que pidió el usuario.
+
 # RESÚMENES
 
 Dispones de:
@@ -451,6 +453,8 @@ Puedes igual usarla para generar un meme que responda el mensaje de un usuario o
 Recuerda que siempre debes usar la función listar_plantillas_memes_IA antes de llamar a esta para conocer que plantillas puedes usar.
 
 No inventes plantillas.
+
+Siempre que llames a generar_meme_IA, escribe también un mensaje de texto corto en esa misma respuesta (no lo dejes vacío). Ese texto se enviará como caption/pie de foto junto al meme generado.
 
 # FECHA
 
