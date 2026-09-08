@@ -150,7 +150,7 @@ async def webhook(request: Request):
                 else:
                     return {"status": "error", "message": "No se pudo obtener los medios del mensaje."}     
                 
-            elif tipo_mensaje == "ptt" or tipo_mensaje == "audio":
+            elif tipo_mensaje == "ptt" or tipo_mensaje == "audio" or tipo_mensaje == "voice":
                 media = data.get("media", None)
                 if media is not None:
                     print("Procesando mensaje de voz...", id_mensaje)
@@ -167,7 +167,7 @@ async def webhook(request: Request):
                         opciones = respuesta["opciones"]
                         multiple = respuesta.get("multiple", False)
                         await enviar_encuesta(chat_id, encuesta, opciones, multiple)
-                    if respuesta["response"] != "No se pudo obtener el tipo de archivo.":
+                    if respuesta["response"] != "No se pudo procesar el audio.":
                         if "error" in respuesta:
                             print(f"[WARN] Error al generar respuesta: {respuesta['error']}")
                             # decide qué hacer: no enviar nada, o enviar un mensaje genérico de error
@@ -323,7 +323,7 @@ async def webhook(request: Request):
                     }
                 else:
                     return {"status": "error", "message": "No se pudo obtener los medios del mensaje."}    
-            elif tipo_mensaje == "ptt" or tipo_mensaje == "audio":
+            elif tipo_mensaje == "ptt" or tipo_mensaje == "audio" or tipo_mensaje == "voice":
                 media = data.get("media", None)
                 if media is not None:
                     print("Procesando mensaje de voz...", id_mensaje)
@@ -340,7 +340,7 @@ async def webhook(request: Request):
                         opciones = respuesta["opciones"]
                         multiple = respuesta.get("multiple", False)
                         await enviar_encuesta(chat_id, encuesta, opciones, multiple)
-                    if respuesta["response"] != "No se pudo obtener el tipo de archivo.":
+                    if respuesta["response"] != "No se pudo procesar el audio.":
                         if "error" in respuesta:
                             print(f"[WARN] Error al generar respuesta: {respuesta['error']}")
                             # decide qué hacer: no enviar nada, o enviar un mensaje genérico de error

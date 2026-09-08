@@ -1293,6 +1293,26 @@ async def ejecutar_tool(tool_name, tool_args, contexto):
  
     return "Función no reconocida", None
 
+def sanear_historial(historial: list) -> list:
+    """
+    Revisa cada mensaje antes de mandarlo al modelo:
+    - Si no es 'assistant' y no tiene 'content', se lo agrega vacío.
+    - Si 'content' es None (cualquier rol), lo cambia a "".
+    Además imprime un [WARN] con el índice y el mensaje problemático,
+    para que puedas rastrear en tu código DÓNDE se está generando ese
+    mensaje corrupto y arreglarlo de raíz (esto es un parche de
+    seguridad, no reemplaza encontrar la causa real).
+    """
+    for i, msg in enumerate(historial):
+        rol = msg.get("role")
+        if "content" not in msg:
+            print(f"[WARN] Mensaje #{i} (role={rol}) sin 'content': {msg}")
+            msg["content"] = "" if rol != "assistant" else None
+        elif msg["content"] is None and rol != "assistant":
+            print(f"[WARN] Mensaje #{i} (role={rol}) con content=None: {msg}")
+            msg["content"] = ""
+    return historial
+
 async def generar_caption_imagen_IA(usuario):
     """Pide al modelo un texto corto para acompañar la imagen/meme recién generado.
     Necesario porque el modelo no puede devolver content + tool_calls a la vez,
@@ -1303,9 +1323,10 @@ async def generar_caption_imagen_IA(usuario):
             "role": "user",
             "content": "Escribe un mensaje breve y natural (sin comillas) para acompañar la imagen que acabas de generar, como si fuera el pie de foto. Responde solo con ese texto."
         }]
+        mensajes_a_enviar = sanear_historial(mensajes_temp)
         respuesta = client.chat.completions.create(
             model=MODEL_NAME,
-            messages=mensajes_temp,
+            messages=mensajes_a_enviar,
             tools=herramientas,
             tool_choice="none"
         )
@@ -1395,7 +1416,8 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
         historial_conversacion[usuario].append({"role": "user", "content": mensaje_traducido})
         # historial_conversacion[usuario].append({"role": "user", "content": mensaje})
     else:
-        tipo_b64 = b64.get('mimetype', None)
+        tipo_b64_raw = b64.get('mimetype', None) or ""
+        tipo_b64 = tipo_b64_raw.split(";")[0].strip()
         if tipo_b64 == "image/jpeg":
             jpeg_base64 = b64.get("data")
             historial_conversacion[usuario].append({"role": "user", "content": [{"type": "text", "text": mensaje}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{jpeg_base64}"}}]})
@@ -1454,9 +1476,10 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
  
         for _ in range(MAX_ITERACIONES_TOOLS):
             print(f"[DEBUG] Enviando al modelo con {len(historial_conversacion[usuario])} mensajes")
+            mensajes_a_enviar = sanear_historial(historial_conversacion[usuario])
             respuesta = client.chat.completions.create(
                 model=MODEL_NAME,
-                messages=historial_conversacion[usuario],
+                messages=mensajes_a_enviar,
                 tools=herramientas
             )
             msg = respuesta.choices[0].message
@@ -1561,9 +1584,10 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
         if not contenido:
             print("[WARN] Contenido vacío, forzando respuesta de texto con tool_choice='none'")
             try:
+                mensajes_a_enviar = sanear_historial(historial_conversacion[usuario])
                 fallback_resp = client.chat.completions.create(
                     model=MODEL_NAME,
-                    messages=historial_conversacion[usuario],
+                    messages=mensajes_a_enviar,
                     tools=herramientas,
                     tool_choice="none"
                 )
