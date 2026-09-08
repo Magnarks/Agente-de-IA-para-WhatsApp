@@ -106,9 +106,9 @@ async def webhook(request: Request):
                 elif respuesta.get("response") == "audio generado":
                     await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} No se pudo generar la respuesta de audio.", id_mensaje)
                 elif respuesta.get("response") == "imagen generada" and "image_file" in respuesta:
-                    await enviar_mensaje_imagen(chat_id, respuesta["image_file"], f"{settings.PREFIJO_MENSAJE} {respuesta.get("caption", "")}")
+                    await enviar_mensaje_imagen(chat_id, base64_image=respuesta["image_file"], mimetype=respuesta.get("mimetype", "image/jpeg"), mensaje=f"{settings.PREFIJO_MENSAJE} {respuesta.get("caption", "")}")
                 elif respuesta.get("response") == "meme generado" and "meme_file" in respuesta:
-                    await enviar_mensaje_imagen(chat_id, respuesta["meme_file"], f"{settings.PREFIJO_MENSAJE} {respuesta.get("caption", "")}")
+                    await enviar_mensaje_imagen(chat_id, base64_image=respuesta["meme_file"], mensaje=f"{settings.PREFIJO_MENSAJE} {respuesta.get("caption", "")}")
                 elif respuesta.get("response") == "encuesta generada" and "encuesta" in respuesta and "opciones" in respuesta:
                     encuesta = respuesta["encuesta"]
                     opciones = respuesta["opciones"]
@@ -124,11 +124,12 @@ async def webhook(request: Request):
                     "status": "ok",
                     "response": respuesta
                 }                
+            
             elif tipo_mensaje == "image" and "@gemma" in mensaje:
                 media = data.get("media", None)
                 if media is not None:
-                    print("Procesando mensaje de chat...", id_mensaje)
-                    respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, media, delivery_id=payload.get("deliveryId"))
+                    print("Procesando mensaje de imagen...", id_mensaje)
+                    respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=media, delivery_id=payload.get("deliveryId"))
                     print(f"Respuesta generada: {respuesta}")
                     if "emoji" in respuesta and id_mensaje:
                         await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
@@ -148,11 +149,12 @@ async def webhook(request: Request):
                     }
                 else:
                     return {"status": "error", "message": "No se pudo obtener los medios del mensaje."}     
+                
             elif tipo_mensaje == "ptt" or tipo_mensaje == "audio":
                 media = data.get("media", None)
                 if media is not None:
-                    print("Procesando mensaje de voz...")
-                    respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, media, delivery_id=payload.get("deliveryId"))
+                    print("Procesando mensaje de voz...", id_mensaje)
+                    respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=media, delivery_id=payload.get("deliveryId"))
                     print(f"Respuesta generada: {respuesta}")
                     if respuesta["response"] == "IGNORAR_AUDIO":
                         return {"status": "error", "message": "No se llamo a gemma en el mensaje."}
@@ -172,7 +174,32 @@ async def webhook(request: Request):
                         else:
                             await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} {respuesta['response']}", id_mensaje)
                 else:
-                    return {"status": "error", "message": "No se pudo obtener los medios del mensaje."}                    
+                    return {"status": "error", "message": "No se pudo obtener los medios del mensaje."}          
+
+            elif tipo_mensaje == "document" and "@gemma" in mensaje:
+                media = data.get("media", None)
+                if media is not None:
+                    print("Procesando mensaje de documento...", id_mensaje)
+                    respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=media, delivery_id=payload.get("deliveryId"))
+                    print(f"Respuesta generada: {respuesta}")
+                    if "emoji" in respuesta and id_mensaje:
+                        await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
+                    if respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
+                        await enviar_mensaje_audio(chat_id, respuesta["audio_file"])
+                    elif respuesta.get("response") == "audio generado":
+                        await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} No se pudo generar la respuesta de audio.", id_mensaje)
+                    else:
+                        if "error" in respuesta:
+                            print(f"[WARN] Error al generar respuesta: {respuesta['error']}")
+                            # decide qué hacer: no enviar nada, o enviar un mensaje genérico de error
+                        else:
+                            await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} {respuesta['response']}", id_mensaje)
+                    return {
+                        "status": "ok",
+                        "response": respuesta
+                    }
+                else:
+                    return {"status": "error", "message": "No se pudo obtener los medios del mensaje."}               
     elif evento == "message.sent":
         data = payload.get("data", {})
         if not data:
@@ -254,9 +281,9 @@ async def webhook(request: Request):
                 elif respuesta.get("response") == "audio generado":
                     await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} No se pudo generar la respuesta de audio.", id_mensaje)
                 elif respuesta.get("response") == "imagen generada" and "image_file" in respuesta:
-                    await enviar_mensaje_imagen(chat_id, respuesta["image_file"], f"{settings.PREFIJO_MENSAJE} {respuesta.get('caption', '')}")
+                    await enviar_mensaje_imagen(chat_id, base64_image=respuesta["image_file"], mimetype=respuesta.get("mimetype", "image/jpeg"), mensaje=f"{settings.PREFIJO_MENSAJE} {respuesta.get('caption', '')}")
                 elif respuesta.get("response") == "meme generado" and "meme_file" in respuesta:
-                    await enviar_mensaje_imagen(chat_id, respuesta["meme_file"], f"{settings.PREFIJO_MENSAJE} {respuesta.get('caption', '')}")
+                    await enviar_mensaje_imagen(chat_id, base64_image=respuesta["meme_file"], mensaje=f"{settings.PREFIJO_MENSAJE} {respuesta.get('caption', '')}")
                 elif respuesta.get("response") == "encuesta generada" and "encuesta" in respuesta and "opciones" in respuesta:
                     encuesta = respuesta["encuesta"]
                     opciones = respuesta["opciones"]
@@ -275,8 +302,8 @@ async def webhook(request: Request):
             elif tipo_mensaje == "image" and "@gemma" in mensaje:
                 media = data.get("media", None)
                 if media is not None:
-                    print("Procesando mensaje de chat...", id_mensaje)
-                    respuesta = await chat(mensaje, remitente, chat_id, media, delivery_id=payload.get("deliveryId"))
+                    print("Procesando mensaje de imagen...", id_mensaje)
+                    respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=media, delivery_id=payload.get("deliveryId"))
                     print(f"Respuesta generada: {respuesta}")
                     if "emoji" in respuesta and id_mensaje:
                         await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
@@ -299,8 +326,8 @@ async def webhook(request: Request):
             elif tipo_mensaje == "ptt" or tipo_mensaje == "audio":
                 media = data.get("media", None)
                 if media is not None:
-                    print("Procesando mensaje de voz...")
-                    respuesta = await chat(mensaje, remitente, chat_id, media, delivery_id=payload.get("deliveryId"))
+                    print("Procesando mensaje de voz...", id_mensaje)
+                    respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=media, delivery_id=payload.get("deliveryId"))
                     print(f"Respuesta generada: {respuesta}")
                     if respuesta["response"] == "IGNORAR_AUDIO":
                         return {"status": "error", "message": "No se llamo a gemma en el mensaje."}

@@ -62,6 +62,7 @@ class Settings:
     VOZ_MASCULINA: str = os.getenv("VOZ_MASCULINA", "C:\\Users\\diego\\Documents\\Python\\IA\\chatbot\\voces\\voz_burro.wav")
     TEXTO_VOZ_MASCULINA: str = os.getenv("TEXTO_VOZ_MASCULINA", "Una vez un granjero me quiso cambiar por un kilo de frijoles mágicos. Eso nunca lo superé. ¡Otro día, en una fiesta, jugaron a ponerle la cola al burro conmigo y qué crees! Me picotearon las nachas. Luego gritaron todos: ¡Piñata! ¡Piñata! y que todos me agarran a palos")
     NVIDIA_API_KEY: str = os.getenv("NVIDIA_API_KEY", "xxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+    GRADIO_API_TOKEN: str = os.getenv("GRADIO_API_TOKEN", "xxxx")
     PREFIJO_MENSAJE: str = os.getenv("PREFIJO_MENSAJE", "🔷 Gemma: ")
 
 settings = Settings()

@@ -6,6 +6,7 @@ from config import settings
 import os
 import subprocess
 import base64
+import mimetypes
 from tavily import TavilyClient, TavilyKeylessLimitError
 from database_chatbot import consultar_mensajes, consultar_memorias, guardar_memoria, consultar_usuarios_grupo
 from generador_imagenes import generar_imagen
@@ -51,8 +52,8 @@ async def generar_reaccion_IA(emoji: str):
     print("Emoji generado:", single_emoji)
     return single_emoji
 
-async def pedir_imagen_IA(peticion: str):
-    imagen_pedida = generar_imagen(peticion)
+async def pedir_imagen_IA(peticion: str, imagen: str = None):
+    imagen_pedida = generar_imagen(peticion, image=imagen)
     print("Imagen pedida:", imagen_pedida)
     return imagen_pedida
 
@@ -570,7 +571,7 @@ def buscar_video_yt_IA(buscar: str):
         return "No se proporcionó una consulta"
     
     try:
-        response = TavilyClient(api_key=settings.TAVILY_API_KEY).search(query=f"https://www.youtube.com/results?search_query={buscar}", max_results=3, include_answer=True, search_depth="advanced")
+        response = TavilyClient(api_key=settings.TAVILY_API_KEY).search(query=f"https://www.youtube.com/results?search_query={buscar}", max_results=5, include_answer=True, search_depth="advanced")
         resultados = []
 
         for r in response["results"]:
@@ -985,9 +986,14 @@ herramientas = [
                     "peticion": {
                         "type": "string",
                         "description": "La petición o descripción de la imagen que se desea generar."
+                    },
+                    "imagen": {
+                        "type": "string",
+                        "description": "La URL o el identificador de la imagen base que se desea utilizar para generar la nueva imagen. Opcional."
                     }
                 },
-                "required": ["peticion"]
+                "required": ["peticion"],
+                "optional": ["imagen"]
             }
         }
     },
@@ -1087,25 +1093,78 @@ def construir_mensaje_miembros(chat_id):
     if not miembros:
         return None
  
-    lineas = []
-    for m in miembros:
-        nombre = m.get("name") or m.get("pushName") or "desconocido"
-        lid = m.get("lid")
-        if lid:
-            lineas.append(f"- {nombre}: {lid}")
- 
-    if not lineas:
+    nombres = [m.get("name") or m.get("pushName") or "desconocido" for m in miembros]
+    if not nombres:
         return None
  
-    contenido = (
-        "Miembros del grupo (Nombre). Usa este valor "
-        "cada vez que quieras mencionar a alguien en tu respuesta, en "
-        "cualquier momento de la conversación (no solo al saludar). "
-        "Nunca uses el número de teléfono, nunca inventes el nombre.\n"
-        + "\n".join(lineas)
+    return (
+        "Miembros del grupo: " + ", ".join(nombres) + ". "
+        "Para mencionar a alguien, escribe @ seguido de su nombre "
+        "tal como aparece aquí (ver instrucciones de mención en tu "
+        "personalidad)."
     )
-    return {"role": "system", "content": contenido}
 
+PATRON_MENCION_CRUDA = re.compile(r'@(\d{8,15})\b')
+ 
+ 
+def construir_mapa_lid_a_nombre(miembros):
+    """
+    Mapa lid_numero (string, sin '@') -> primer nombre. Se usa para
+    traducir menciones crudas que llegan de WhatsApp ('@230369278316610')
+    a algo legible ('@Daniel') ANTES de que el modelo procese el
+    mensaje. Así nunca ve números y no tiene tentación de copiarlos de
+    vuelta en su propia respuesta.
+    """
+    mapa = {}
+    for m in miembros:
+        lid_raw = (m.get("lid") or "").lstrip("@")
+        if not lid_raw:
+            continue
+        nombre = (m.get("name") or m.get("pushName") or "").strip()
+        if not nombre:
+            continue
+        mapa[lid_raw] = nombre.split()[0]  # primer nombre, suena más natural
+    return mapa
+ 
+ 
+def traducir_menciones_a_nombre(texto: str, miembros):
+    """
+    Reemplaza cada '@<lid>' crudo por '@Nombre' usando la lista de
+    miembros. Si el número no coincide con nadie conocido, lo deja tal
+    cual (no inventa nombres).
+    """
+    if not texto:
+        return texto
+ 
+    mapa = construir_mapa_lid_a_nombre(miembros)
+    if not mapa:
+        return texto
+ 
+    def _reemplazar(match):
+        numero = match.group(1)
+        nombre = mapa.get(numero)
+        return f"@{nombre}" if nombre else match.group(0)
+ 
+    return PATRON_MENCION_CRUDA.sub(_reemplazar, texto)
+
+
+def leer_imagen_como_base64(ruta_archivo: str):
+    """
+    Lee un archivo de imagen local y devuelve (base64_string, mimetype).
+    mimetype se detecta por la extensión del archivo (ej. .png -> image/png),
+    porque el mimetype hardcodeado a 'image/jpeg' que tenías se rompería
+    con los .png que devuelve tu nuevo entorno de Gradio.
+    """
+    with open(ruta_archivo, "rb") as f:
+        datos_binarios = f.read()
+
+    imagen_base64 = base64.b64encode(datos_binarios).decode("utf-8")
+
+    mimetype, _ = mimetypes.guess_type(ruta_archivo)
+    if mimetype is None:
+        mimetype = "image/png"  # fallback razonable
+
+    return imagen_base64, mimetype
 
 async def ejecutar_tool(tool_name, tool_args, contexto):
     """
@@ -1173,11 +1232,14 @@ async def ejecutar_tool(tool_name, tool_args, contexto):
         return resultado, None
  
     if tool_name == "pedir_imagen_IA":
-        resultado_imagen = await pedir_imagen_IA(tool_args.get("peticion"))
-        if isinstance(resultado_imagen, dict) and "artifacts" in resultado_imagen:
+        resultado_imagen = await pedir_imagen_IA(tool_args.get("peticion"), tool_args.get("imagen"))
+        if isinstance(resultado_imagen, tuple) and len(resultado_imagen) > 0:
+            ruta_local = resultado_imagen[0]
+            imagen_base64, mimetype_detectado = leer_imagen_como_base64(ruta_local)
             response_data = {
                 "response": "imagen generada",
-                "image_file": resultado_imagen["artifacts"][0]["base64"],
+                "image_file": imagen_base64,
+                "mimetype": mimetype_detectado,
             }
             if contexto.get("texto_respuesta"):
                 response_data["caption"] = contexto["texto_respuesta"]
@@ -1273,7 +1335,12 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
         # Cargar contexto mensajes previos del chat
         mensajes_previos = consultar_mensajes(chat_id, 10)  # Obtener los últimos 10 mensajes del chat
         if mensajes_previos:
-            contenido_mensajes = "\n".join([f"- [{m.get('timestamp', '')}] {m.get('author', m.get('from', 'desconocido'))}: {sanitizar_texto_previo(m.get('body', ''), m.get('type'))}" for m in mensajes_previos])
+            miembros = consultar_usuarios_grupo(chat_id)
+            contenido_mensajes = "\n".join([
+                f"- [{m.get('timestamp', '')}] {m.get('author', m.get('from', 'desconocido'))}: "
+                f"{traducir_menciones_a_nombre(m.get('body', ''), miembros)}"
+                for m in mensajes_previos
+            ])
             historial_conversacion[usuario].append({
                 "role": "system",
                 "content": f"Mensajes previos del chat:\n{contenido_mensajes}"
@@ -1308,9 +1375,8 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
             else:
                 historial_conversacion[usuario].insert(2, nuevo_msg)
 
-        texto_miembros_actualizado = construir_mensaje_miembros(chat_id)
-        if texto_miembros_actualizado:
-            nuevo_msg_miembros = {"role": "system", "content": texto_miembros_actualizado}
+        nuevo_msg_miembros = construir_mensaje_miembros(chat_id)
+        if nuevo_msg_miembros:
             idx_miembros = next((i for i, msg in enumerate(historial_conversacion[usuario])
                                  if msg.get("role") == "system" and "Miembros del grupo" in msg.get("content", "")), None)
             if idx_miembros is not None:
@@ -1324,7 +1390,10 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
         # salvaguarda: nunca dejar crecer el contexto indefinidamente con un solo mensaje
         if len(mensaje) > 4000:
             mensaje = mensaje[:4000] + "... [contenido truncado]"
-        historial_conversacion[usuario].append({"role": "user", "content": mensaje})
+        miembros = consultar_usuarios_grupo(chat_id)
+        mensaje_traducido = traducir_menciones_a_nombre(mensaje, miembros)
+        historial_conversacion[usuario].append({"role": "user", "content": mensaje_traducido})
+        # historial_conversacion[usuario].append({"role": "user", "content": mensaje})
     else:
         tipo_b64 = b64.get('mimetype', None)
         if tipo_b64 == "image/jpeg":

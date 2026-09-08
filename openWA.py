@@ -206,7 +206,7 @@ def registrar_webhook_openwa(estado_conexion_openwa):
     }
     parametros = {
         "url": settings.OPENWA_WEBHOOK_URL,
-        "events": ["message.received", "message.sent", "message.ack", "message.failed", "message.revoked", "message.reaction", "message.edited", "session.status", "session.qr", "session.authenticated", "session.disconnected", "session.reconnect_loop", "group.join", "group.leave", "group.update", "call.received", "*"],
+        "events": ["message.received", "message.sent", "message.ack", "message.failed", "message.revoked", "message.reaction", "message.edited", "status.received", "session.status", "session.qr", "session.authenticated", "session.disconnected", "session.reconnect_loop", "session.restriction", "presence.update", "group.join", "group.leave", "group.update", "group.join_request", "call.received", "call.accepted", "call.rejected", "call.missed", "*"],
         "secret": settings.OPENWA_SECRET_WEBHOOK,
         "headers": {
             "X-Custom-Header": "value"
@@ -395,7 +395,7 @@ async def enviar_mensaje_audio(contact_id, audio_file_path):
         print(f"Error en la solicitud: {e}")
         return False
     
-async def enviar_mensaje_imagen(contact_id, base64_image, mensaje=""):
+async def enviar_mensaje_imagen(contact_id, url_image=None, base64_image=None, mimetype="image/jpeg", mensaje=""):
 
     print(f"Preparando para enviar el mensaje de imagen al contacto: {contact_id}")
 
@@ -413,12 +413,22 @@ async def enviar_mensaje_imagen(contact_id, base64_image, mensaje=""):
         "Accept": "*/*",
         "Authorization": f"Bearer {settings.OPENWA_API_TOKEN}",
     }
-    payload = {
-        "chatId": contact_id,
-        "base64": base64_image,
-        "mimetype": "image/jpeg",
-        "caption": mensaje
-    }
+    if base64_image is not None:
+        payload = {
+            "chatId": contact_id,
+            "base64": base64_image,
+            "mimetype": mimetype,
+            "caption": mensaje
+        }
+    elif url_image is not None:
+        payload = {
+            "chatId": contact_id,
+            "url": url_image,
+            "caption": mensaje
+        }
+    else:
+        print("Error: No se proporcionó ninguna imagen.")
+        return False
     # payload = {
     #     "chatId": contact_id,
     #     "image": {
