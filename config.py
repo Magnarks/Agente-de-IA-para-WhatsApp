@@ -59,6 +59,8 @@ class Settings:
     API_FOOTBALL_KEY: str = os.getenv("API_FOOTBALL_KEY", "API_FOOTBALL_KEY")
     VOZ_FEMENINA: str = os.getenv("VOZ_FEMENINA", "C:\\Users\\diego\\Documents\\Python\\IA\\chatbot\\voces\\voz_paisa.wav")
     TEXTO_VOZ_FEMENINA: str = os.getenv("TEXTO_VOZ_FEMENINA", "Papacito, ¿Que usted y yo que somos? Yo celosa y usted mio")
+    VOZ_FEMENINA_2: str = os.getenv("VOZ_FEMENINA_2", "C:\\Users\\diego\\Documents\\Python\\IA\\chatbot\\voces\\voz_paisa_2.wav")
+    TEXTO_VOZ_FEMENINA_2: str = os.getenv("TEXTO_VOZ_FEMENINA_2", "Saben algo que me parece demasiado curioso a mí: yo voy mucho al gimnasio y últimamente cada vez que entro al gimnasio, solo veo hombres levantando pesas y haciendo ¡Ah! ")
     VOZ_MASCULINA: str = os.getenv("VOZ_MASCULINA", "C:\\Users\\diego\\Documents\\Python\\IA\\chatbot\\voces\\voz_burro.wav")
     TEXTO_VOZ_MASCULINA: str = os.getenv("TEXTO_VOZ_MASCULINA", "Una vez un granjero me quiso cambiar por un kilo de frijoles mágicos. Eso nunca lo superé. ¡Otro día, en una fiesta, jugaron a ponerle la cola al burro conmigo y qué crees! Me picotearon las nachas. Luego gritaron todos: ¡Piñata! ¡Piñata! y que todos me agarran a palos")
     NVIDIA_API_KEY: str = os.getenv("NVIDIA_API_KEY", "xxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")

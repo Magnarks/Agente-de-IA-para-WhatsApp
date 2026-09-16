@@ -150,14 +150,14 @@ async def webhook(request: Request):
                 else:
                     return {"status": "error", "message": "No se pudo obtener los medios del mensaje."}     
                 
-            elif tipo_mensaje == "ptt" or tipo_mensaje == "audio" or tipo_mensaje == "voice":
+            elif (tipo_mensaje == "ptt" or tipo_mensaje == "audio" or tipo_mensaje == "voice") and chat_id == settings.DEFAULT_GROUP.split(",")[0]:
                 media = data.get("media", None)
                 if media is not None:
                     print("Procesando mensaje de voz...", id_mensaje)
                     respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=media, delivery_id=payload.get("deliveryId"))
                     print(f"Respuesta generada: {respuesta}")
-                    if respuesta["response"] == "IGNORAR_AUDIO":
-                        return {"status": "error", "message": "No se llamo a gemma en el mensaje."}
+                    if respuesta["response"] == "IGNORAR_AUDIO" or respuesta["response"] == "No se pudo obtener el tipo de archivo.":
+                        return {"status": "error", "message": "No se llamo a gemma en el mensaje o no se pudo obtener el tipo de archivo."}
                     if "emoji" in respuesta and id_mensaje:
                         await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
                     elif respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
@@ -323,14 +323,14 @@ async def webhook(request: Request):
                     }
                 else:
                     return {"status": "error", "message": "No se pudo obtener los medios del mensaje."}    
-            elif tipo_mensaje == "ptt" or tipo_mensaje == "audio" or tipo_mensaje == "voice":
+            elif (tipo_mensaje == "ptt" or tipo_mensaje == "audio" or tipo_mensaje == "voice") and chat_id == settings.DEFAULT_GROUP.split(",")[0]:
                 media = data.get("media", None)
                 if media is not None:
                     print("Procesando mensaje de voz...", id_mensaje)
                     respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=media, delivery_id=payload.get("deliveryId"))
                     print(f"Respuesta generada: {respuesta}")
-                    if respuesta["response"] == "IGNORAR_AUDIO":
-                        return {"status": "error", "message": "No se llamo a gemma en el mensaje."}
+                    if respuesta["response"] == "IGNORAR_AUDIO" or respuesta["response"] == "No se pudo obtener el tipo de archivo.":
+                        return {"status": "error", "message": "No se llamo a gemma en el mensaje o no se pudo obtener el tipo de archivo."}
                     if "emoji" in respuesta and id_mensaje:
                         await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
                     elif respuesta.get("response") == "audio generado" and "audio_file" in respuesta:

@@ -740,8 +740,8 @@ async def transcribir_con_whisper_local(wav_bytes):
 async def generar_respuesta_audio_IA(texto, delivery_id, tipo_voz="masculina"):
     try:
         if tipo_voz == "femenina":
-            voz = settings.VOZ_FEMENINA
-            texto_voz = settings.TEXTO_VOZ_FEMENINA
+            voz = settings.VOZ_FEMENINA_2
+            texto_voz = settings.TEXTO_VOZ_FEMENINA_2
         else:
             voz = settings.VOZ_MASCULINA
             texto_voz = settings.TEXTO_VOZ_MASCULINA
@@ -1234,7 +1234,37 @@ async def ejecutar_tool(tool_name, tool_args, contexto):
     if tool_name == "pedir_imagen_IA":
         resultado_imagen = await pedir_imagen_IA(tool_args.get("peticion"), tool_args.get("imagen"))
         if isinstance(resultado_imagen, tuple) and len(resultado_imagen) > 0:
-            ruta_local = resultado_imagen[0]
+
+            primer_elemento = resultado_imagen[0]
+
+            # Formato nuevo:
+            # ([{'image': 'ruta.png', 'caption': None}], mensaje, seed)
+            if isinstance(primer_elemento, list):
+                if not primer_elemento:
+                    raise ValueError("El endpoint no devolvió imágenes.")
+
+                primera_imagen = primer_elemento[0]
+
+                if isinstance(primera_imagen, dict):
+                    ruta_local = primera_imagen.get("image")
+                else:
+                    ruta_local = primera_imagen
+
+            # Formato anterior:
+            # ('ruta.png', seed)
+            elif isinstance(primer_elemento, str):
+                ruta_local = primer_elemento
+
+            else:
+                raise ValueError(
+                    f"Formato de respuesta de imagen no reconocido: {type(primer_elemento)}"
+                )
+
+            if not ruta_local:
+                raise ValueError("No se encontró la ruta de la imagen.")
+
+            print("Ruta de imagen:", ruta_local)
+
             imagen_base64, mimetype_detectado = leer_imagen_como_base64(ruta_local)
             response_data = {
                 "response": "imagen generada",
@@ -1431,11 +1461,12 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
                 )
                 wav_bytes = process.stdout
                 wav_base64 = base64.b64encode(wav_bytes).decode()
-                buscando_gemma = await transcribir_con_whisper_local(wav_bytes)
-                if "gema" or "gemma" in buscando_gemma.lower():
-                    historial_conversacion[usuario].append({"role": "user", "content": [{"type": "text", "text": "Transcribe el audio. Si NO escuchas las palabras: gemma o gema responde exactamente: IGNORAR_AUDIO Sin explicaciones adicionales. Si sí escuchas alguna de esas palabras, responde normalmente."}, {"type": "input_audio", "input_audio": {"data": wav_base64, "format": "wav"}}]})
-                else:
-                    return {"response": "No se pudo procesar el audio, o No se llamo a gemma en el mensaje."}
+                historial_conversacion[usuario].append({"role": "user", "content": [{"type": "text", "text": "Si NO escuchas las palabras: gemma o gema responde exactamente: IGNORAR_AUDIO Sin explicaciones adicionales. Si en cambio si escuchas gemma o gema, responde normalmente."}, {"type": "input_audio", "input_audio": {"data": wav_base64, "format": "wav"}}]})
+                # buscando_gemma = await transcribir_con_whisper_local(wav_bytes)
+                # if "gema" in buscando_gemma.lower() or "gemma" in buscando_gemma.lower():
+                #     historial_conversacion[usuario].append({"role": "user", "content": [{"type": "text", "text": "Si NO escuchas las palabras: gemma o gema responde exactamente: IGNORAR_AUDIO Sin explicaciones adicionales. Si sí escuchas alguna de esas palabras, responde normalmente o transcribe el audio."}, {"type": "input_audio", "input_audio": {"data": wav_base64, "format": "wav"}}]})
+                # else:
+                #     return {"response": "No se pudo procesar el audio, o No se llamo a gemma en el mensaje."}
             else:
                 return {"response": "No se pudo procesar el audio."}
         elif tipo_b64 in _MIMETYPES_DOCUMENTO:
