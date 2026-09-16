@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Request, HTTPException
 from config import settings
+import base64
+import mimetypes
 import threading
 from chatIA import chat, sanitizar_texto_previo
-from openWA import obtener_informacion_contacto, obtener_informacion_grupo, enviar_mensaje, enviar_mensaje_audio, reaccionar_mensaje, enviar_mensaje_imagen, enviar_encuesta
+from openWA import obtener_informacion_contacto, obtener_informacion_grupo, enviar_mensaje, enviar_mensaje_audio, reaccionar_mensaje, enviar_mensaje_imagen, enviar_encuesta, obtener_media_mensaje
 from database_chatbot import guardar_mensaje, consultar_media_mensaje_citado
 
 # Caché para deduplicar eventos de webhook (message.id)
@@ -22,6 +24,12 @@ def is_duplicate_webhook(payload):
 
         processed_deliveries.add(delivery_id)
         return False
+
+def leer_video_como_base64(datos_binarios: bytes):
+    """
+    Codifica bytes que YA tienes en memoria a base64.
+    """
+    return base64.b64encode(datos_binarios).decode("utf-8")
 
 @router.post("/webhook")
 async def webhook(request: Request):
@@ -199,7 +207,38 @@ async def webhook(request: Request):
                         "response": respuesta
                     }
                 else:
-                    return {"status": "error", "message": "No se pudo obtener los medios del mensaje."}               
+                    return {"status": "error", "message": "No se pudo obtener los medios del mensaje."}
+
+            elif tipo_mensaje == "video" and "@gemma" in mensaje:
+                media = data.get("media", None)
+                if media is not None:
+                    print("Procesando mensaje de video...", id_mensaje)
+                    if media['omitted'] == True:
+                        media = await obtener_media_mensaje(chat_id, id_mensaje)
+                        media = leer_video_como_base64(media)
+                        media = {"data": media, "mimetype": "video/mp4"}
+                    print(f"Media obtenida: {media}")
+                    respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=media, delivery_id=payload.get("deliveryId"))
+                    print(f"Respuesta generada: {respuesta}")
+                    if "emoji" in respuesta and id_mensaje:
+                        await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
+                    if respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
+                        await enviar_mensaje_audio(chat_id, respuesta["audio_file"])
+                    elif respuesta.get("response") == "audio generado":
+                        await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} No se pudo generar la respuesta de audio.", id_mensaje)
+                    else:
+                        if "error" in respuesta:
+                            print(f"[WARN] Error al generar respuesta: {respuesta['error']}")
+                            # decide qué hacer: no enviar nada, o enviar un mensaje genérico de error
+                        else:
+                            await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} {respuesta['response']}", id_mensaje)
+                    return {
+                        "status": "ok",
+                        "response": respuesta
+                    }
+                else:
+                    return {"status": "error", "message": "No se pudo obtener los medios del mensaje."} 
+                                   
     elif evento == "message.sent":
         data = payload.get("data", {})
         if not data:
@@ -347,7 +386,63 @@ async def webhook(request: Request):
                         else:
                             await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} {respuesta['response']}", id_mensaje)
                 else:
-                    return {"status": "error", "message": "No se pudo obtener los medios del mensaje."}    
+                    return {"status": "error", "message": "No se pudo obtener los medios del mensaje."}   
+
+            elif tipo_mensaje == "document" and "@gemma" in mensaje:
+                media = data.get("media", None)
+                if media is not None:
+                    print("Procesando mensaje de documento...", id_mensaje)
+                    respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=media, delivery_id=payload.get("deliveryId"))
+                    print(f"Respuesta generada: {respuesta}")
+                    if "emoji" in respuesta and id_mensaje:
+                        await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
+                    if respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
+                        await enviar_mensaje_audio(chat_id, respuesta["audio_file"])
+                    elif respuesta.get("response") == "audio generado":
+                        await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} No se pudo generar la respuesta de audio.", id_mensaje)
+                    else:
+                        if "error" in respuesta:
+                            print(f"[WARN] Error al generar respuesta: {respuesta['error']}")
+                            # decide qué hacer: no enviar nada, o enviar un mensaje genérico de error
+                        else:
+                            await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} {respuesta['response']}", id_mensaje)
+                    return {
+                        "status": "ok",
+                        "response": respuesta
+                    }
+                else:
+                    return {"status": "error", "message": "No se pudo obtener los medios del mensaje."}
+
+            elif tipo_mensaje == "video" and "@gemma" in mensaje:
+                media = data.get("media", None)
+                if media is not None:
+                    print("Procesando mensaje de video...", id_mensaje)
+                    if media['omitted'] == True:
+                        media = await obtener_media_mensaje(chat_id, id_mensaje)
+                        media = leer_video_como_base64(media)
+                        media = {"data": media, "mimetype": "video/mp4"}
+                    print(f"Media obtenida: {media}")
+                    respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=media, delivery_id=payload.get("deliveryId"))
+                    print(f"Respuesta generada: {respuesta}")
+                    if "emoji" in respuesta and id_mensaje:
+                        await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
+                    if respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
+                        await enviar_mensaje_audio(chat_id, respuesta["audio_file"])
+                    elif respuesta.get("response") == "audio generado":
+                        await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} No se pudo generar la respuesta de audio.", id_mensaje)
+                    else:
+                        if "error" in respuesta:
+                            print(f"[WARN] Error al generar respuesta: {respuesta['error']}")
+                            # decide qué hacer: no enviar nada, o enviar un mensaje genérico de error
+                        else:
+                            await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} {respuesta['response']}", id_mensaje)
+                    return {
+                        "status": "ok",
+                        "response": respuesta
+                    }
+                else:
+                    return {"status": "error", "message": "No se pudo obtener los medios del mensaje."} 
+             
     else:
        return {"status": "error", "message": "No se pudo recibir evento."} 
 

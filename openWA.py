@@ -506,3 +506,23 @@ async def enviar_encuesta(contact_id, encuesta, opciones, multiple=False):
     except requests.exceptions.RequestException as e:
         print(f"Error en la solicitud: {e}")
         return False
+
+async def obtener_media_mensaje(contact_id, id_mensaje):
+    api_url = f"{settings.OPENWA_BASE_URL}/api/sessions/{settings.OPENWA_SESSION_ID}/messages/{contact_id}/{id_mensaje}/media"
+    headers = {
+        "Accept": "*/*",
+        "Authorization": f"Bearer {settings.OPENWA_API_TOKEN}",
+    }
+    try:
+        response = requests.get(api_url, headers=headers)
+        if response.status_code == 200:
+            return response.content
+        else:
+            print("Error al obtener media del mensaje.", response.status_code, response.text)
+            return None
+    except requests.exceptions.Timeout:
+        print("Error: La solicitud ha excedido el tiempo de espera.")
+        return None
+    except requests.exceptions.RequestException as e:
+        print(f"Error en la solicitud: {e}")
+        return None

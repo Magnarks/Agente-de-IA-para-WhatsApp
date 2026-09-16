@@ -1436,6 +1436,9 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
                 historial_conversacion[usuario].insert(2, nuevo_msg_miembros)
 
         print(f"[INFO] Memorias y fecha actualizadas para {usuario} (llamada #{contador_llamadas[usuario]})")
+
+    idx_media_pesada = None
+    tipo_media_pesada = None
  
     if b64 is None:
         # salvaguarda: nunca dejar crecer el contexto indefinidamente con un solo mensaje
@@ -1451,6 +1454,8 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
         if tipo_b64 == "image/jpeg":
             jpeg_base64 = b64.get("data")
             historial_conversacion[usuario].append({"role": "user", "content": [{"type": "text", "text": mensaje}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{jpeg_base64}"}}]})
+            idx_media_pesada = len(historial_conversacion[usuario]) - 1
+            tipo_media_pesada = "imagen"
         elif tipo_b64 == "audio/ogg":
             ogg_bytes = base64.b64decode(b64.get('data', None))
             if ogg_bytes is not None:
@@ -1462,6 +1467,8 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
                 wav_bytes = process.stdout
                 wav_base64 = base64.b64encode(wav_bytes).decode()
                 historial_conversacion[usuario].append({"role": "user", "content": [{"type": "text", "text": "Si NO escuchas las palabras: gemma o gema responde exactamente: IGNORAR_AUDIO Sin explicaciones adicionales. Si en cambio si escuchas gemma o gema, responde normalmente."}, {"type": "input_audio", "input_audio": {"data": wav_base64, "format": "wav"}}]})
+                idx_media_pesada = len(historial_conversacion[usuario]) - 1
+                tipo_media_pesada = "audio"
                 # buscando_gemma = await transcribir_con_whisper_local(wav_bytes)
                 # if "gema" in buscando_gemma.lower() or "gemma" in buscando_gemma.lower():
                 #     historial_conversacion[usuario].append({"role": "user", "content": [{"type": "text", "text": "Si NO escuchas las palabras: gemma o gema responde exactamente: IGNORAR_AUDIO Sin explicaciones adicionales. Si sí escuchas alguna de esas palabras, responde normalmente o transcribe el audio."}, {"type": "input_audio", "input_audio": {"data": wav_base64, "format": "wav"}}]})
@@ -1482,6 +1489,17 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
                 "role": "user",
                 "content": f"{prefijo}[Documento: {nombre_doc}]\n{texto_doc}"
             })
+        elif tipo_b64 == "video/mp4":
+            video_base64 = b64.get("data")
+            historial_conversacion[usuario].append({
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": mensaje},
+                    {"type": "input_video", "input_video": {"data": video_base64, "format": "mp4"}}
+                ]
+            })
+            idx_media_pesada = len(historial_conversacion[usuario]) - 1
+            tipo_media_pesada = "video"
         else:
             return {"response": "No se pudo obtener el tipo de archivo."}
  
@@ -1632,6 +1650,18 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
         if reaccion_emoji:
             response_data["emoji"] = reaccion_emoji
         return response_data
- 
     except Exception as e:
         return {"error": str(e)}
+    finally:
+        # Se ejecuta SIEMPRE al salir de chat(), sin importar si fue un
+        # return normal, un return anticipado desde el loop de tools, o
+        # una excepción — así el base64 pesado nunca sobrevive más allá
+        # de este turno, una vez el modelo ya tuvo oportunidad de verlo.
+        if idx_media_pesada is not None:
+            historial_conversacion[usuario][idx_media_pesada] = {
+                "role": "user",
+                "content": (
+                    f"[{tipo_media_pesada} enviado por el usuario. "
+                    f"Texto que lo acompañaba: {mensaje or '(sin texto adicional)'}]"
+                )
+            }
