@@ -2,6 +2,7 @@ from fastapi import APIRouter, Request, HTTPException
 from config import settings
 import base64
 import mimetypes
+import magic
 import threading
 from chatIA import chat, sanitizar_texto_previo
 from openWA import obtener_informacion_contacto, obtener_informacion_grupo, enviar_mensaje, enviar_mensaje_audio, reaccionar_mensaje, enviar_mensaje_imagen, enviar_encuesta, obtener_media_mensaje
@@ -25,11 +26,13 @@ def is_duplicate_webhook(payload):
         processed_deliveries.add(delivery_id)
         return False
 
-def leer_video_como_base64(datos_binarios: bytes):
+def leer_archivo_como_base64(datos_binarios: bytes):
     """
     Codifica bytes que YA tienes en memoria a base64.
     """
-    return base64.b64encode(datos_binarios).decode("utf-8")
+    base64_string = base64.b64encode(datos_binarios).decode("utf-8")
+    mimetype = magic.from_buffer(datos_binarios, mime=True)
+    return base64_string, mimetype
 
 @router.post("/webhook")
 async def webhook(request: Request):
@@ -77,7 +80,7 @@ async def webhook(request: Request):
 
             mensaje = data.get("body", "")
             tipo_mensaje = data.get("type", "desconocido")
-            remitente = info_contacto.get("name", "pushName")
+            remitente = info_contacto.get("pushName", "desconocido")
             if "error" in info_contacto and fromMe == False:
                 if info_contacto.get("error") == "No se pudo obtener la información del contacto.":
                     contacto = data.get("contact", "desconocido")
@@ -95,12 +98,14 @@ async def webhook(request: Request):
                 id_citado = None
                 body_citado = ""
 
-            if tipo_mensaje == "text" and "@gemma" in mensaje:
+            if tipo_mensaje == "text" and ("@gemma" in mensaje or settings.PREFIJO_MENSAJE in body_citado):
                 print("Procesando mensaje de chat...", id_mensaje)
                 delivery_id = payload.get("deliveryId")
                 if id_citado is not None:
-                    media_citado = consultar_media_mensaje_citado(chat_id, id_citado)
+                    media_citado = await obtener_media_mensaje(chat_id, id_citado)
                     if media_citado is not None:
+                        media_citado, mimetype_citado = leer_archivo_como_base64(media_citado)
+                        media_citado = {"data": media_citado, "mimetype": mimetype_citado}
                         respuesta = await chat(mensaje + " " + f"'{body_citado}'", remitente, id_remitente_grupo, chat_id, media_citado, delivery_id=delivery_id)
                     else:
                         respuesta = await chat(mensaje + " " + f"'{body_citado}'", remitente, id_remitente_grupo, chat_id, delivery_id=delivery_id)                            
@@ -133,7 +138,7 @@ async def webhook(request: Request):
                     "response": respuesta
                 }                
             
-            elif tipo_mensaje == "image" and "@gemma" in mensaje:
+            elif tipo_mensaje == "image" and ("@gemma" in mensaje or settings.PREFIJO_MENSAJE in body_citado):
                 media = data.get("media", None)
                 if media is not None:
                     print("Procesando mensaje de imagen...", id_mensaje)
@@ -184,7 +189,7 @@ async def webhook(request: Request):
                 else:
                     return {"status": "error", "message": "No se pudo obtener los medios del mensaje."}          
 
-            elif tipo_mensaje == "document" and "@gemma" in mensaje:
+            elif tipo_mensaje == "document" and ("@gemma" in mensaje or settings.PREFIJO_MENSAJE in body_citado):
                 media = data.get("media", None)
                 if media is not None:
                     print("Procesando mensaje de documento...", id_mensaje)
@@ -209,14 +214,14 @@ async def webhook(request: Request):
                 else:
                     return {"status": "error", "message": "No se pudo obtener los medios del mensaje."}
 
-            elif tipo_mensaje == "video" and "@gemma" in mensaje:
+            elif tipo_mensaje == "video" and ("@gemma" in mensaje or settings.PREFIJO_MENSAJE in body_citado):
                 media = data.get("media", None)
                 if media is not None:
                     print("Procesando mensaje de video...", id_mensaje)
                     if media['omitted'] == True:
                         media = await obtener_media_mensaje(chat_id, id_mensaje)
-                        media = leer_video_como_base64(media)
-                        media = {"data": media, "mimetype": "video/mp4"}
+                        media, mimetype = leer_archivo_como_base64(media)
+                        media = {"data": media, "mimetype": mimetype}
                     print(f"Media obtenida: {media}")
                     respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=media, delivery_id=payload.get("deliveryId"))
                     print(f"Respuesta generada: {respuesta}")
@@ -277,7 +282,7 @@ async def webhook(request: Request):
 
             mensaje = data.get("body", "")
             tipo_mensaje = data.get("type", "desconocido")
-            remitente = info_contacto.get("name", "pushName")
+            remitente = info_contacto.get("pushName", "desconocido")
             if "error" in info_contacto and fromMe == False:
                 if info_contacto.get("error") == "No se pudo obtener la información del contacto.":
                     contacto = data.get("contact", "desconocido")
@@ -301,12 +306,14 @@ async def webhook(request: Request):
                 id_citado = None
                 body_citado = ""
 
-            if tipo_mensaje == "text" and "@gemma" in mensaje:
+            if tipo_mensaje == "text" and ("@gemma" in mensaje or settings.PREFIJO_MENSAJE in body_citado):
                 print("Procesando mensaje de chat...", id_mensaje)
                 delivery_id = payload.get("deliveryId")
                 if id_citado is not None:
-                    media_citado = consultar_media_mensaje_citado(chat_id, id_citado)
+                    media_citado = await obtener_media_mensaje(chat_id, id_citado)
                     if media_citado is not None:
+                        media_citado, mimetype_citado = leer_archivo_como_base64(media_citado)
+                        media_citado = {"data": media_citado, "mimetype": mimetype_citado}
                         respuesta = await chat(mensaje + " " + f"'{body_citado}'", remitente, id_remitente_grupo, chat_id, media_citado, delivery_id=delivery_id)
                     else:
                         respuesta = await chat(mensaje + " " + f"'{body_citado}'", remitente, id_remitente_grupo, chat_id, delivery_id=delivery_id)
@@ -338,7 +345,7 @@ async def webhook(request: Request):
                     "status": "ok",
                     "response": respuesta
                 }
-            elif tipo_mensaje == "image" and "@gemma" in mensaje:
+            elif tipo_mensaje == "image" and ("@gemma" in mensaje or settings.PREFIJO_MENSAJE in body_citado):
                 media = data.get("media", None)
                 if media is not None:
                     print("Procesando mensaje de imagen...", id_mensaje)
@@ -388,7 +395,7 @@ async def webhook(request: Request):
                 else:
                     return {"status": "error", "message": "No se pudo obtener los medios del mensaje."}   
 
-            elif tipo_mensaje == "document" and "@gemma" in mensaje:
+            elif tipo_mensaje == "document" and ("@gemma" in mensaje or settings.PREFIJO_MENSAJE in body_citado):
                 media = data.get("media", None)
                 if media is not None:
                     print("Procesando mensaje de documento...", id_mensaje)
@@ -413,14 +420,14 @@ async def webhook(request: Request):
                 else:
                     return {"status": "error", "message": "No se pudo obtener los medios del mensaje."}
 
-            elif tipo_mensaje == "video" and "@gemma" in mensaje:
+            elif tipo_mensaje == "video" and ("@gemma" in mensaje or settings.PREFIJO_MENSAJE in body_citado):
                 media = data.get("media", None)
                 if media is not None:
                     print("Procesando mensaje de video...", id_mensaje)
                     if media['omitted'] == True:
                         media = await obtener_media_mensaje(chat_id, id_mensaje)
-                        media = leer_video_como_base64(media)
-                        media = {"data": media, "mimetype": "video/mp4"}
+                        media, mimetype = leer_archivo_como_base64(media)
+                        media = {"data": media, "mimetype": mimetype}
                     print(f"Media obtenida: {media}")
                     respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=media, delivery_id=payload.get("deliveryId"))
                     print(f"Respuesta generada: {respuesta}")

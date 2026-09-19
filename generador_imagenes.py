@@ -37,7 +37,7 @@ def generar_imagen(prompt: str, width: int = 1024, height: int = 1024, seed: int
     # )
     # print(result)
     # return result
-    client = Client("misukisu/Krea-2-Turbo_I2I", token=settings.GRADIO_API_TOKEN)
+    client = Client("Magnarks/Krea-2-Turbo_I2I", token=settings.GRADIO_API_TOKEN)
     result = client.predict(
         param_0="text2image",
         param_1=prompt,
@@ -56,7 +56,7 @@ def generar_imagen(prompt: str, width: int = 1024, height: int = 1024, seed: int
         param_14="beta",
         param_15=seed,
         param_16=True,
-        param_17=300,
+        param_17=0,
         param_18="pornmasterKrea2_v2TurboInt8.safetensors",
         param_19="Hello!!",
         param_20="Hello!!",

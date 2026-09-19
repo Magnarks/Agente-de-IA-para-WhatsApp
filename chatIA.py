@@ -11,6 +11,7 @@ from tavily import TavilyClient, TavilyKeylessLimitError
 from database_chatbot import consultar_mensajes, consultar_memorias, guardar_memoria, consultar_usuarios_grupo
 from generador_imagenes import generar_imagen
 from generador_memes import generar_meme_bytes
+from youtube_API import buscar_video, descargar_audio
 import whisper
 import tempfile
 from datetime import datetime
@@ -570,35 +571,20 @@ def buscar_video_yt_IA(buscar: str):
     if not buscar or not buscar.strip():
         return "No se proporcionó una consulta"
     
-    try:
-        response = TavilyClient(api_key=settings.TAVILY_API_KEY).search(query=f"https://www.youtube.com/results?search_query={buscar}", max_results=5, include_answer=True, search_depth="advanced")
-        resultados = []
+    video = buscar_video(buscar)
+    return {
+        "titulo": video.title,
+        "url": video.watch_url,
+        "duracion": str(video.length // 60) + "min"
+    } 
 
-        for r in response["results"]:
-            resultados.append({
-                "titulo": r["title"],
-                "contenido": r["content"],
-                "fuente": r["url"]
-            })
+def descargar_video_yt_IA(url: str):
 
-        print(resultados)
-        return {
-            "respuesta_actualizada": response.get("answer"),
-            "fuentes": [
-                {
-                    "titulo": r["title"],
-                    "contenido": r["content"],
-                    "fuente": r["url"]
-                }
-                for r in response["results"]
-            ]
-        }
-    except TavilyKeylessLimitError as e:
-        # Rate-limit cap reached. The exception carries the human-readable
-        # message plus structured fields (code, window, retry_after_seconds,
-        # next_actions) returned by the Tavily API.
-        print(e)
-        print("retry after:", e.retry_after_seconds, "seconds")
+    if not url or not url.strip():
+        return "No se proporcionó una URL"
+    
+    descargar_audio(url)
+    return {"mensaje": "Descarga iniciada"}
 
 def consultar_resultado_deportivo_IA(partido: str):
 
@@ -855,7 +841,7 @@ herramientas = [
         "type": "function",
         "function": {
             "name": "buscar_video_yt_IA",
-            "description": "Busca videos en YouTube. Debe utilizarse para encontrar videos recientes, populares o específicos en la plataforma de YouTube. Usala cuando el usuario pregunte por un video, canción, tutorial, clip o cualquier contenido que pueda estar en YouTube. No olvides compartir el enlace del video en la respuesta. puedes complementar una respuesta con un ejemplo visual que pueda estar en youtube.",
+            "description": "Busca videos en YouTube. Debe utilizarse para encontrar videos recientes, populares o específicos en la plataforma de YouTube. Usala cuando el usuario pregunte por un video, canción, tutorial, clip o cualquier contenido que pueda estar en YouTube. No olvides compartir el enlace del video en la respuesta. inmediatamente después de terminar la busqueda usa la función descargar_video_yt_IA.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -865,6 +851,23 @@ herramientas = [
                     }
                 },
                 "required": ["buscar"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "descargar_video_yt_IA",
+            "description": "Descarga un video de YouTube utilizando la URL proporcionada. Debe utilizarse inmediatamente después de buscar un video con buscar_video_yt_IA.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "La URL del video de YouTube que se desea descargar."
+                    }
+                },
+                "required": ["url"]
             }
         }
     },
@@ -1451,9 +1454,9 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
     else:
         tipo_b64_raw = b64.get('mimetype', None) or ""
         tipo_b64 = tipo_b64_raw.split(";")[0].strip()
-        if tipo_b64 == "image/jpeg":
-            jpeg_base64 = b64.get("data")
-            historial_conversacion[usuario].append({"role": "user", "content": [{"type": "text", "text": mensaje}, {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{jpeg_base64}"}}]})
+        if tipo_b64 == "image/jpeg" or tipo_b64 == "image/png" or tipo_b64 == "image/gif" or tipo_b64 == "image/webp":
+            image_base64 = b64.get("data")
+            historial_conversacion[usuario].append({"role": "user", "content": [{"type": "text", "text": mensaje}, {"type": "image_url", "image_url": {"url": f"data:{tipo_b64};base64,{image_base64}"}}]})
             idx_media_pesada = len(historial_conversacion[usuario]) - 1
             tipo_media_pesada = "imagen"
         elif tipo_b64 == "audio/ogg":

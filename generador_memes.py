@@ -1,6 +1,6 @@
 import os
 import MemePy
-import base64
+# import base64
 
 ruta_actual = os.path.dirname(os.path.abspath(__file__))
 carpeta_imagenes = os.path.join(ruta_actual, "imagenes")
