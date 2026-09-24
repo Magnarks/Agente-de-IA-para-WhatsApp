@@ -5,10 +5,14 @@ from contextlib import asynccontextmanager
 from routes.routes import router
 from chatIA import chat
 from openWA import registrar_webhook_openwa, enviar_mensaje, obtener_informacion_grupo, obtener_informacion_contacto, iniciar_sesion_openwa, detener_sesion_openwa, estado_sesion_openwa
-from database_chatbot import consultar_usuarios_grupo
+from database_chatbot import consultar_usuarios_grupo, limpiar_mensajes_antiguos, asegurar_indices
 import uvicorn
 from config import settings
 import asyncio
+
+# --- STARTUP ---
+limpiar_mensajes_antiguos(horas=24)
+asegurar_indices()
 
 estado_conexion_openwa = False
 
@@ -63,8 +67,8 @@ async def lifespan(app: FastAPI):
         print('No se inicializo modelo de IA')
     else:
         if len(lista_participantes) > 0 and sesion_realizada == "ready":
-            await enviar_mensaje(settings.DEFAULT_GROUP.split(",")[0], settings.PREFIJO_MENSAJE + " " + respuesta["response"])
-            #pass
+            #await enviar_mensaje(settings.DEFAULT_GROUP.split(",")[0], settings.PREFIJO_MENSAJE + " " + respuesta["response"])
+            pass
         else:
             print("No se pudo enviar el mensaje. Verifica que la sesión esté activa.")
         # El yield marca la transición entre startup y shutdown
@@ -77,14 +81,14 @@ async def lifespan(app: FastAPI):
         else:
             respuesta = await chat("Apagando... genera una respuesta de despedida.", "administrador", "", "")
         if respuesta.get("error") == 'Connection error.':
-            await enviar_mensaje(settings.DEFAULT_GROUP.split(",")[0], settings.PREFIJO_MENSAJE + " Gemma Apagada...")  
+            #await enviar_mensaje(settings.DEFAULT_GROUP.split(",")[0], settings.PREFIJO_MENSAJE + " Gemma Apagada...")  
             await asyncio.sleep(ESPERA_SEGUNDOS)
             await detener_sesion_openwa()
             estado_conexion_openwa = False
             print("Sesión de OpenWA detenida.")  
         else:
             if len(lista_participantes) > 0 and sesion_realizada == "ready":
-                await enviar_mensaje(settings.DEFAULT_GROUP.split(",")[0], settings.PREFIJO_MENSAJE + " " + respuesta["response"])
+                #await enviar_mensaje(settings.DEFAULT_GROUP.split(",")[0], settings.PREFIJO_MENSAJE + " " + respuesta["response"])
                 await asyncio.sleep(ESPERA_SEGUNDOS)
                 await detener_sesion_openwa()
                 estado_conexion_openwa = False

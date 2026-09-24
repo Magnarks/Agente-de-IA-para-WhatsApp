@@ -115,7 +115,7 @@ async def webhook(request: Request):
                 if "emoji" in respuesta and id_mensaje:
                     await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
                 if respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
-                    await enviar_mensaje_audio(chat_id, respuesta["audio_file"])
+                    await enviar_mensaje_audio(chat_id, respuesta["audio_file"], voz=respuesta.get("voz", False))
                 elif respuesta.get("response") == "audio generado":
                     await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} No se pudo generar la respuesta de audio.", id_mensaje)
                 elif respuesta.get("response") == "imagen generada" and "image_file" in respuesta:
@@ -147,7 +147,7 @@ async def webhook(request: Request):
                     if "emoji" in respuesta and id_mensaje:
                         await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
                     if respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
-                        await enviar_mensaje_audio(chat_id, respuesta["audio_file"])
+                        await enviar_mensaje_audio(chat_id, respuesta["audio_file"], voz=respuesta.get("voz", False))
                     elif respuesta.get("response") == "audio generado":
                         await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} No se pudo generar la respuesta de audio.", id_mensaje)
                     else:
@@ -174,7 +174,7 @@ async def webhook(request: Request):
                     if "emoji" in respuesta and id_mensaje:
                         await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
                     elif respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
-                        await enviar_mensaje_audio(chat_id, respuesta["audio_file"])
+                        await enviar_mensaje_audio(chat_id, respuesta["audio_file"], voz=respuesta.get("voz", False))
                     elif respuesta.get("response") == "encuesta generada" and "encuesta" in respuesta and "opciones" in respuesta:
                         encuesta = respuesta["encuesta"]
                         opciones = respuesta["opciones"]
@@ -193,12 +193,17 @@ async def webhook(request: Request):
                 media = data.get("media", None)
                 if media is not None:
                     print("Procesando mensaje de documento...", id_mensaje)
+                    if 'omitted' in media and media['omitted'] == True:
+                        media = await obtener_media_mensaje(chat_id, id_mensaje)
+                        media, mimetype = leer_archivo_como_base64(media)
+                        media = {"data": media, "mimetype": mimetype}
+                    print(f"Media obtenida: {media}")
                     respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=media, delivery_id=payload.get("deliveryId"))
                     print(f"Respuesta generada: {respuesta}")
                     if "emoji" in respuesta and id_mensaje:
                         await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
                     if respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
-                        await enviar_mensaje_audio(chat_id, respuesta["audio_file"])
+                        await enviar_mensaje_audio(chat_id, respuesta["audio_file"], voz=respuesta.get("voz", False))
                     elif respuesta.get("response") == "audio generado":
                         await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} No se pudo generar la respuesta de audio.", id_mensaje)
                     else:
@@ -218,7 +223,7 @@ async def webhook(request: Request):
                 media = data.get("media", None)
                 if media is not None:
                     print("Procesando mensaje de video...", id_mensaje)
-                    if media['omitted'] == True:
+                    if 'omitted' in media and media['omitted'] == True:
                         media = await obtener_media_mensaje(chat_id, id_mensaje)
                         media, mimetype = leer_archivo_como_base64(media)
                         media = {"data": media, "mimetype": mimetype}
@@ -228,7 +233,7 @@ async def webhook(request: Request):
                     if "emoji" in respuesta and id_mensaje:
                         await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
                     if respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
-                        await enviar_mensaje_audio(chat_id, respuesta["audio_file"])
+                        await enviar_mensaje_audio(chat_id, respuesta["audio_file"], voz=respuesta.get("voz", False))
                     elif respuesta.get("response") == "audio generado":
                         await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} No se pudo generar la respuesta de audio.", id_mensaje)
                     else:
@@ -323,7 +328,7 @@ async def webhook(request: Request):
                 if "emoji" in respuesta and id_mensaje:
                     await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
                 if respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
-                    await enviar_mensaje_audio(chat_id, respuesta["audio_file"])
+                    await enviar_mensaje_audio(chat_id, respuesta["audio_file"], voz=respuesta.get("voz", False))
                 elif respuesta.get("response") == "audio generado":
                     await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} No se pudo generar la respuesta de audio.", id_mensaje)
                 elif respuesta.get("response") == "imagen generada" and "image_file" in respuesta:
@@ -354,7 +359,7 @@ async def webhook(request: Request):
                     if "emoji" in respuesta and id_mensaje:
                         await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
                     if respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
-                        await enviar_mensaje_audio(chat_id, respuesta["audio_file"])
+                        await enviar_mensaje_audio(chat_id, respuesta["audio_file"], voz=respuesta.get("voz", False))
                     elif respuesta.get("response") == "audio generado":
                         await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} No se pudo generar la respuesta de audio.", id_mensaje)
                     else:
@@ -380,7 +385,7 @@ async def webhook(request: Request):
                     if "emoji" in respuesta and id_mensaje:
                         await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
                     elif respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
-                        await enviar_mensaje_audio(chat_id, respuesta["audio_file"])
+                        await enviar_mensaje_audio(chat_id, respuesta["audio_file"], voz=respuesta.get("voz", False))
                     elif respuesta.get("response") == "encuesta generada" and "encuesta" in respuesta and "opciones" in respuesta:  
                         encuesta = respuesta["encuesta"]
                         opciones = respuesta["opciones"]
@@ -399,12 +404,17 @@ async def webhook(request: Request):
                 media = data.get("media", None)
                 if media is not None:
                     print("Procesando mensaje de documento...", id_mensaje)
+                    if 'omitted' in media and media['omitted'] == True:
+                        media = await obtener_media_mensaje(chat_id, id_mensaje)
+                        media, mimetype = leer_archivo_como_base64(media)
+                        media = {"data": media, "mimetype": mimetype}
+                    print(f"Media obtenida: {media}")
                     respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=media, delivery_id=payload.get("deliveryId"))
                     print(f"Respuesta generada: {respuesta}")
                     if "emoji" in respuesta and id_mensaje:
                         await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
                     if respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
-                        await enviar_mensaje_audio(chat_id, respuesta["audio_file"])
+                        await enviar_mensaje_audio(chat_id, respuesta["audio_file"], voz=respuesta.get("voz", False))
                     elif respuesta.get("response") == "audio generado":
                         await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} No se pudo generar la respuesta de audio.", id_mensaje)
                     else:
@@ -424,7 +434,7 @@ async def webhook(request: Request):
                 media = data.get("media", None)
                 if media is not None:
                     print("Procesando mensaje de video...", id_mensaje)
-                    if media['omitted'] == True:
+                    if 'omitted' in media and media['omitted'] == True:
                         media = await obtener_media_mensaje(chat_id, id_mensaje)
                         media, mimetype = leer_archivo_como_base64(media)
                         media = {"data": media, "mimetype": mimetype}
@@ -434,7 +444,7 @@ async def webhook(request: Request):
                     if "emoji" in respuesta and id_mensaje:
                         await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
                     if respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
-                        await enviar_mensaje_audio(chat_id, respuesta["audio_file"])
+                        await enviar_mensaje_audio(chat_id, respuesta["audio_file"], voz=respuesta.get("voz", False))
                     elif respuesta.get("response") == "audio generado":
                         await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} No se pudo generar la respuesta de audio.", id_mensaje)
                     else:

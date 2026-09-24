@@ -350,7 +350,7 @@ async def enviar_mensaje(contact_id, mensaje, id_mensaje = None):
             print(f"Error en la solicitud: {e}")
             return False
     
-async def enviar_mensaje_audio(contact_id, audio_file_path):
+async def enviar_mensaje_audio(contact_id, audio_file_path, voz=False):
 
     print(f"Preparando para enviar el mensaje de audio: {audio_file_path} al contacto: {contact_id}")
 
@@ -372,7 +372,7 @@ async def enviar_mensaje_audio(contact_id, audio_file_path):
         "chatId": contact_id,
         "base64": audio_string,
         "mimetype": "audio/ogg",
-        "ptt": True
+        "ptt": voz
     }
     # payload = {
     #     "chatId": contact_id,

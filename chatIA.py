@@ -4,12 +4,13 @@ import json
 from config import settings
 # from supertonic import TTS
 import os
+import asyncio
 import subprocess
 import base64
 import mimetypes
 from tavily import TavilyClient, TavilyKeylessLimitError
 from database_chatbot import consultar_mensajes, consultar_memorias, guardar_memoria, consultar_usuarios_grupo
-from generador_imagenes import generar_imagen
+from generador_imagenes import espacio_esta_dormido, generar_imagen_con_reintentos
 from generador_memes import generar_meme_bytes
 from youtube_API import buscar_video, descargar_audio
 import whisper
@@ -34,6 +35,9 @@ historial_conversacion = {}
 contador_llamadas = {}
 RECARGAR_CADA = 10  # Recargar memorias y fecha cada N llamadas por usuario
 
+# Ajusta esto al Space y token que estés usando
+SPACE_ID_IMAGENES = "Magnarks/Krea-2-Turbo_I2I"  # o el Space que estés usando en ese momento
+
 #fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 async def guardar_memoria_IA(remitente: str, id_remitente: str, memoria: str):
@@ -53,10 +57,26 @@ async def generar_reaccion_IA(emoji: str):
     print("Emoji generado:", single_emoji)
     return single_emoji
 
-async def pedir_imagen_IA(peticion: str, imagen: str = None):
-    imagen_pedida = generar_imagen(peticion, image=imagen)
-    print("Imagen pedida:", imagen_pedida)
-    return imagen_pedida
+async def pedir_imagen_IA(peticion: str, chat_id: str):
+    """
+    A diferencia de antes, ahora recibe chat_id: lo necesita para
+    poder mandar el aviso intermedio directamente por WhatsApp si el
+    Space está dormido, ANTES de esperar a que termine de generar.
+    """
+    from openWA import enviar_mensaje  # import local para evitar import circular
+ 
+    if await espacio_esta_dormido(SPACE_ID_IMAGENES, hf_token=settings.HF_API_TOKEN):
+        await enviar_mensaje(
+            chat_id,
+            "🎨 Dame un par de minutos, el generador de imágenes estaba dormido y tiene que despertar primero..."
+        )
+ 
+    resultado_imagen = await generar_imagen_con_reintentos(
+        SPACE_ID_IMAGENES,
+        peticion,
+        hf_token=settings.HF_API_TOKEN
+    )
+    return resultado_imagen
 
 def listar_plantillas_memes_IA():
     PLANTILLAS_MEMES = {
@@ -566,25 +586,42 @@ def consultar_internet_IA(buscar: str):
         print(e)
         print("retry after:", e.retry_after_seconds, "seconds")
 
-def buscar_video_yt_IA(buscar: str):
+async def buscar_video_yt_IA(buscar: str, chat_id: str):
 
     if not buscar or not buscar.strip():
         return "No se proporcionó una consulta"
     
     video = buscar_video(buscar)
+    # await descargar_audio_yt_IA(video.watch_url, chat_id)
     return {
         "titulo": video.title,
         "url": video.watch_url,
         "duracion": str(video.length // 60) + "min"
     } 
 
-def descargar_video_yt_IA(url: str):
+def _convertir_a_ogg_sync(ruta_entrada: str) -> str:
+    ruta_salida = os.path.splitext(ruta_entrada)[0] + ".ogg"
+    subprocess.run([
+        "ffmpeg",
+        "-y",
+        "-i", ruta_entrada,
+        "-c:a", "libopus",
+        "-ar", "48000",
+        "-ac", "1",
+        "-b:a", "32k",
+        ruta_salida
+    ], check=True, capture_output=True)
+    return ruta_salida
 
+async def descargar_audio_yt_IA(url: str, chat_id: str) -> None:
+    print(f"Descargando audio de la URL: {url}")
     if not url or not url.strip():
         return "No se proporcionó una URL"
     
-    descargar_audio(url)
-    return {"mensaje": "Descarga iniciada"}
+    ruta_descarga = await descargar_audio(url)
+    ruta_ogg = await asyncio.to_thread(_convertir_a_ogg_sync, ruta_descarga)
+    print(f"Audio descargado y convertido a OGG: {ruta_ogg}")
+    return {"response": "audio generado", "audio_file": ruta_ogg, "voz": False}
 
 def consultar_resultado_deportivo_IA(partido: str):
 
@@ -841,7 +878,15 @@ herramientas = [
         "type": "function",
         "function": {
             "name": "buscar_video_yt_IA",
-            "description": "Busca videos en YouTube. Debe utilizarse para encontrar videos recientes, populares o específicos en la plataforma de YouTube. Usala cuando el usuario pregunte por un video, canción, tutorial, clip o cualquier contenido que pueda estar en YouTube. No olvides compartir el enlace del video en la respuesta. inmediatamente después de terminar la busqueda usa la función descargar_video_yt_IA.",
+            "description": (
+                "Busca un video en YouTube y devuelve su título, URL y "
+                "duración. Úsala para CUALQUIER contenido de YouTube: "
+                "canciones, videos, tutoriales, clips, etc. Siempre "
+                "comparte el enlace del video en tu respuesta al usuario. "
+                "Si el usuario pide un video o canción nueva, haz una "
+                "nueva búsqueda — no asumas que sigue siendo la misma de "
+                "antes."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -857,14 +902,27 @@ herramientas = [
     {
         "type": "function",
         "function": {
-            "name": "descargar_video_yt_IA",
-            "description": "Descarga un video de YouTube utilizando la URL proporcionada. Debe utilizarse inmediatamente después de buscar un video con buscar_video_yt_IA.",
+            "name": "descargar_audio_yt_IA",
+            "description": (
+                "Descarga el AUDIO de un video de YouTube y lo envía "
+                "directamente al usuario como nota de audio (no solo el "
+                "enlace). Requiere haber llamado antes a buscar_video_yt_IA "
+                "en este mismo turno para obtener la URL.\n\n"
+                "Úsala SOLO cuando el usuario pida explícitamente ESCUCHAR "
+                "o RECIBIR el audio/canción — frases como 'pásame la "
+                "canción', 'mándame el audio', 'descárgala', 'quiero "
+                "escucharla', 'ponla'.\n\n"
+                "NO la uses si el usuario solo pregunta por un video, pide "
+                "ver un tutorial/clip, o solo quiere información/el "
+                "enlace — en esos casos el enlace de buscar_video_yt_IA ya "
+                "es suficiente, no descargues nada."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "url": {
                         "type": "string",
-                        "description": "La URL del video de YouTube que se desea descargar."
+                        "description": "La URL del video de YouTube (obtenida de buscar_video_yt_IA) del que se desea extraer el audio."
                     }
                 },
                 "required": ["url"]
@@ -1067,7 +1125,7 @@ herramientas = [
     }
 ]
 
-MAX_ITERACIONES_TOOLS = 3  # límite de seguridad para evitar loops infinitos
+MAX_ITERACIONES_TOOLS = 4  # límite de seguridad para evitar loops infinitos
 
 # Tipos de mensaje de WhatsApp cuyo 'body' no es texto legible (stickers,
 # medios, etc.) y puede venir como blob binario/base64 gigante.
@@ -1203,7 +1261,7 @@ async def ejecutar_tool(tool_name, tool_args, contexto):
         _delivery_id = delivery_id or str(uuid.uuid4())
         resultado_audio = await generar_respuesta_audio_IA(texto_audio, _delivery_id, tipo_voz)
         if "audio_file" in resultado_audio:
-            response_data = {"response": "audio generado", "audio_file": resultado_audio["audio_file"]}
+            response_data = {"response": "audio generado", "audio_file": resultado_audio["audio_file"], "voz": True}
             if contexto.get("reaccion_emoji"):
                 response_data["emoji"] = contexto["reaccion_emoji"]
             return resultado_audio, response_data
@@ -1217,7 +1275,12 @@ async def ejecutar_tool(tool_name, tool_args, contexto):
         return consultar_internet_IA(tool_args.get("buscar")), None
 
     if tool_name == "buscar_video_yt_IA":
-        return buscar_video_yt_IA(tool_args.get("buscar")), None
+        return await buscar_video_yt_IA(tool_args.get("buscar"), chat_id), None
+
+    if tool_name == "descargar_audio_yt_IA":
+        url = tool_args.get("url")
+        resultado = await descargar_audio_yt_IA(url, chat_id)
+        return resultado, None
  
     if tool_name == "consultar_resultado_deportivo_IA":
         resultado = consultar_resultado_deportivo_IA(tool_args.get("buscar"))
@@ -1235,7 +1298,7 @@ async def ejecutar_tool(tool_name, tool_args, contexto):
         return resultado, None
  
     if tool_name == "pedir_imagen_IA":
-        resultado_imagen = await pedir_imagen_IA(tool_args.get("peticion"), tool_args.get("imagen"))
+        resultado_imagen = await pedir_imagen_IA(tool_args.get("peticion"), chat_id)
         if isinstance(resultado_imagen, tuple) and len(resultado_imagen) > 0:
 
             primer_elemento = resultado_imagen[0]
@@ -1621,7 +1684,7 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
             if match_peticion:
                 prompt_imagen = match_peticion.group(1)
                 print(f"[INFO] pedir_imagen_IA detectada como texto, ejecutando con: {prompt_imagen}")
-                resultado_img_txt = await pedir_imagen_IA(prompt_imagen)
+                resultado_img_txt = await pedir_imagen_IA(prompt_imagen, chat_id)
                 if isinstance(resultado_img_txt, dict) and "artifacts" in resultado_img_txt:
                     rdata = {"response": "imagen generada", "image_file": resultado_img_txt["artifacts"][0]["base64"]}
                     if reaccion_emoji:
