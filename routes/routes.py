@@ -150,6 +150,8 @@ async def webhook(request: Request):
                         await enviar_mensaje_audio(chat_id, respuesta["audio_file"], voz=respuesta.get("voz", False))
                     elif respuesta.get("response") == "audio generado":
                         await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} No se pudo generar la respuesta de audio.", id_mensaje)
+                    elif respuesta.get("response") == "imagen generada" and "image_file" in respuesta:
+                        await enviar_mensaje_imagen(chat_id, base64_image=respuesta["image_file"], mimetype=respuesta.get("mimetype", "image/jpeg"), mensaje=f"{settings.PREFIJO_MENSAJE} {respuesta.get('caption', '')}")
                     else:
                         if "error" in respuesta:
                             print(f"[WARN] Error al generar respuesta: {respuesta['error']}")
@@ -362,6 +364,8 @@ async def webhook(request: Request):
                         await enviar_mensaje_audio(chat_id, respuesta["audio_file"], voz=respuesta.get("voz", False))
                     elif respuesta.get("response") == "audio generado":
                         await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} No se pudo generar la respuesta de audio.", id_mensaje)
+                    elif respuesta.get("response") == "imagen generada" and "image_file" in respuesta:
+                        await enviar_mensaje_imagen(chat_id, base64_image=respuesta["image_file"], mimetype=respuesta.get("mimetype", "image/jpeg"), mensaje=f"{settings.PREFIJO_MENSAJE} {respuesta.get('caption', '')}")
                     else:
                         if "error" in respuesta:
                             print(f"[WARN] Error al generar respuesta: {respuesta['error']}")

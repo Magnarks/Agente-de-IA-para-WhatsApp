@@ -57,7 +57,7 @@ async def generar_reaccion_IA(emoji: str):
     print("Emoji generado:", single_emoji)
     return single_emoji
 
-async def pedir_imagen_IA(peticion: str, chat_id: str):
+async def pedir_imagen_IA(peticion: str, chat_id: str, base64_img: str = None):
     """
     A diferencia de antes, ahora recibe chat_id: lo necesita para
     poder mandar el aviso intermedio directamente por WhatsApp si el
@@ -74,7 +74,8 @@ async def pedir_imagen_IA(peticion: str, chat_id: str):
     resultado_imagen = await generar_imagen_con_reintentos(
         SPACE_ID_IMAGENES,
         peticion,
-        hf_token=settings.HF_API_TOKEN
+        hf_token=settings.HF_API_TOKEN,
+        base64_img=base64_img
     )
     return resultado_imagen
 
@@ -1034,7 +1035,7 @@ herramientas = [
             }
         }
     },
-    {
+{
         "type": "function",
         "function": {
             "name": "pedir_imagen_IA",
@@ -1048,13 +1049,12 @@ herramientas = [
                         "type": "string",
                         "description": "La petición o descripción de la imagen que se desea generar."
                     },
-                    "imagen": {
-                        "type": "string",
-                        "description": "La URL o el identificador de la imagen base que se desea utilizar para generar la nueva imagen. Opcional."
+                    "usar_imagen_referencia": {
+                        "type": "boolean",
+                        "description": "true SOLO si el usuario adjuntó una imagen en este mensaje (o en uno muy reciente) y quiere usarla como base/referencia para editar o inspirar la nueva imagen. false si se pide generar desde cero. NUNCA inventes ni escribas datos de la imagen aquí, nosotros nos encargamos de eso automáticamente."
                     }
                 },
-                "required": ["peticion"],
-                "optional": ["imagen"]
+                "required": ["peticion"]
             }
         }
     },
@@ -1298,7 +1298,12 @@ async def ejecutar_tool(tool_name, tool_args, contexto):
         return resultado, None
  
     if tool_name == "pedir_imagen_IA":
-        resultado_imagen = await pedir_imagen_IA(tool_args.get("peticion"), chat_id)
+        usar_referencia = bool(tool_args.get("usar_imagen_referencia"))
+        # El base64 SIEMPRE sale de contexto (el que tu código capturó
+        # directo del webhook), nunca de tool_args — el modelo no puede
+        # ni debe transportar ese dato, solo decide si aplica o no.
+        base64_real = contexto.get("imagen_referencia_base64") if usar_referencia else None
+        resultado_imagen = await pedir_imagen_IA(tool_args.get("peticion"), chat_id, base64_img=base64_real)
         if isinstance(resultado_imagen, tuple) and len(resultado_imagen) > 0:
 
             primer_elemento = resultado_imagen[0]
@@ -1505,6 +1510,7 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
 
     idx_media_pesada = None
     tipo_media_pesada = None
+    imagen_referencia_base64 = None
  
     if b64 is None:
         # salvaguarda: nunca dejar crecer el contexto indefinidamente con un solo mensaje
@@ -1522,6 +1528,7 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
             historial_conversacion[usuario].append({"role": "user", "content": [{"type": "text", "text": mensaje}, {"type": "image_url", "image_url": {"url": f"data:{tipo_b64};base64,{image_base64}"}}]})
             idx_media_pesada = len(historial_conversacion[usuario]) - 1
             tipo_media_pesada = "imagen"
+            imagen_referencia_base64 = image_base64
         elif tipo_b64 == "audio/ogg":
             ogg_bytes = base64.b64decode(b64.get('data', None))
             if ogg_bytes is not None:
@@ -1584,6 +1591,7 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
             "delivery_id": delivery_id,
             "reaccion_emoji": None,
             "texto_respuesta": None,
+            "imagen_referencia_base64": imagen_referencia_base64,
         }
  
         contenido = ""

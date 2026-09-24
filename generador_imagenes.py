@@ -2,6 +2,13 @@ import asyncio
 import time
 from huggingface_hub import HfApi
 from gradio_client import Client, handle_file
+import base64
+import os
+import random
+
+ruta_actual = os.path.dirname(os.path.abspath(__file__))
+
+carpeta_imagenes = os.path.join(ruta_actual, "imagenes")
  
 def _espacio_esta_dormido_sync(space_id: str, hf_token: str) -> bool:
     try:
@@ -18,8 +25,15 @@ async def espacio_esta_dormido(space_id: str, hf_token: str) -> bool:
     return await asyncio.to_thread(_espacio_esta_dormido_sync, space_id, hf_token=hf_token)
  
  
-def _generar_imagen_sync(space_id: str, prompt: str, hf_token: str = None, timeout_segundos: int = 180, max_intentos: int = 2, width: int = 1024, height: int = 1024, seed: int = 2, steps: int = 8):
+def _generar_imagen_sync(space_id: str, prompt: str, hf_token: str = None, timeout_segundos: int = 180, max_intentos: int = 2, width: int = 1024, height: int = 1024, seed: int = 2, steps: int = 8, base64_img: str = None):
     ultimo_error = None
+    imagen_referencia = None
+    if base64_img:
+        imagen_bytes = base64.b64decode(base64_img)
+        ruta_imagen_referencia = os.path.join(carpeta_imagenes, f"imagen_referencia_{random.randint(0, 1000000)}.png")
+        with open(ruta_imagen_referencia, "wb") as f:
+            f.write(imagen_bytes)
+        imagen_referencia = handle_file(ruta_imagen_referencia)
     for intento in range(1, max_intentos + 1):
         try:
             client = Client(
@@ -28,11 +42,11 @@ def _generar_imagen_sync(space_id: str, prompt: str, hf_token: str = None, timeo
                 httpx_kwargs={"timeout": timeout_segundos},
             )
             return client.predict(
-                param_0="text2image",
+                param_0="edit" if base64_img else "text2image",
                 param_1=prompt,
-                param_2="",
-                param_3=handle_file('https://raw.githubusercontent.com/gradio-app/gradio/main/test/test_files/bus.png'),
-                param_4=handle_file('https://raw.githubusercontent.com/gradio-app/gradio/main/test/test_files/bus.png'),
+                param_2=prompt if base64_img else "",
+                param_3=imagen_referencia if imagen_referencia else handle_file('https://raw.githubusercontent.com/gradio-app/gradio/main/test/test_files/bus.png'),
+                param_4=imagen_referencia if imagen_referencia else handle_file('https://raw.githubusercontent.com/gradio-app/gradio/main/test/test_files/bus.png'),
                 param_5=width,
                 param_6=height,
                 param_7=1.4,
@@ -79,10 +93,10 @@ def _generar_imagen_sync(space_id: str, prompt: str, hf_token: str = None, timeo
     raise ultimo_error
  
  
-async def generar_imagen_con_reintentos(space_id: str, prompt: str, hf_token: str = None):
-    return await asyncio.to_thread(_generar_imagen_sync, space_id, prompt, hf_token, width=1024, height=1024, seed=2, steps=8)
+async def generar_imagen_con_reintentos(space_id: str, prompt: str, hf_token: str = None, base64_img: str = None):
+    return await asyncio.to_thread(_generar_imagen_sync, space_id, prompt, hf_token, width=1024, height=1024, seed=2, steps=8, base64_img=base64_img)
 
-# def generar_imagen(prompt: str, width: int = 1024, height: int = 1024, seed: int = 2, steps: int = 8, image: str = None):
+# def generar_imagen(prompt: str, width: int = 1024, height: int = 1024, seed: int = 2, steps: int = 8, base64_img: str = None):
 
 #     client = Client("Magnarks/Krea-2-Turbo_I2I", token=settings.GRADIO_API_TOKEN)
 #     result = client.predict(
