@@ -25,12 +25,13 @@ async def espacio_esta_dormido(space_id: str, hf_token: str) -> bool:
     return await asyncio.to_thread(_espacio_esta_dormido_sync, space_id, hf_token=hf_token)
  
  
-def _generar_imagen_sync(space_id: str, prompt: str, hf_token: str = None, timeout_segundos: int = 180, max_intentos: int = 2, width: int = 1024, height: int = 1024, seed: int = 2, steps: int = 8, base64_img: str = None):
+def _generar_imagen_sync(space_id: str, prompt: str, hf_token: str = None, timeout_segundos: int = 180, max_intentos: int = 2, width: int = 1024, height: int = 1024, seed: int = 2, steps: int = 8, base64_img: str = None, mimetype_img: str = None):
     ultimo_error = None
     imagen_referencia = None
     if base64_img:
         imagen_bytes = base64.b64decode(base64_img)
-        ruta_imagen_referencia = os.path.join(carpeta_imagenes, f"imagen_referencia_{random.randint(0, 1000000)}.png")
+        mimetype_img = mimetype_img or "image/png"
+        ruta_imagen_referencia = os.path.join(carpeta_imagenes, f"imagen_referencia_{random.randint(0, 1000000)}.{mimetype_img.split('/')[-1]}")
         with open(ruta_imagen_referencia, "wb") as f:
             f.write(imagen_bytes)
         imagen_referencia = handle_file(ruta_imagen_referencia)
@@ -93,8 +94,8 @@ def _generar_imagen_sync(space_id: str, prompt: str, hf_token: str = None, timeo
     raise ultimo_error
  
  
-async def generar_imagen_con_reintentos(space_id: str, prompt: str, hf_token: str = None, base64_img: str = None):
-    return await asyncio.to_thread(_generar_imagen_sync, space_id, prompt, hf_token, width=1024, height=1024, seed=2, steps=8, base64_img=base64_img)
+async def generar_imagen_con_reintentos(space_id: str, prompt: str, hf_token: str = None, base64_img: str = None, mimetype_img: str = None):
+    return await asyncio.to_thread(_generar_imagen_sync, space_id, prompt, hf_token, width=1024, height=1024, seed=2, steps=8, base64_img=base64_img, mimetype_img=mimetype_img)
 
 # def generar_imagen(prompt: str, width: int = 1024, height: int = 1024, seed: int = 2, steps: int = 8, base64_img: str = None):
 

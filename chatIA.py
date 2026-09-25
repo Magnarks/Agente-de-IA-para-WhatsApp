@@ -57,7 +57,7 @@ async def generar_reaccion_IA(emoji: str):
     print("Emoji generado:", single_emoji)
     return single_emoji
 
-async def pedir_imagen_IA(peticion: str, chat_id: str, base64_img: str = None):
+async def pedir_imagen_IA(peticion: str, chat_id: str, base64_img: str = None, mimetype_img: str = None):
     """
     A diferencia de antes, ahora recibe chat_id: lo necesita para
     poder mandar el aviso intermedio directamente por WhatsApp si el
@@ -75,7 +75,8 @@ async def pedir_imagen_IA(peticion: str, chat_id: str, base64_img: str = None):
         SPACE_ID_IMAGENES,
         peticion,
         hf_token=settings.HF_API_TOKEN,
-        base64_img=base64_img
+        base64_img=base64_img,
+        mimetype_img=mimetype_img
     )
     return resultado_imagen
 
@@ -1212,9 +1213,7 @@ def traducir_menciones_a_nombre(texto: str, miembros):
 def leer_imagen_como_base64(ruta_archivo: str):
     """
     Lee un archivo de imagen local y devuelve (base64_string, mimetype).
-    mimetype se detecta por la extensión del archivo (ej. .png -> image/png),
-    porque el mimetype hardcodeado a 'image/jpeg' que tenías se rompería
-    con los .png que devuelve tu nuevo entorno de Gradio.
+    mimetype se detecta por la extensión del archivo (ej. .png -> image/png)
     """
     with open(ruta_archivo, "rb") as f:
         datos_binarios = f.read()
@@ -1303,7 +1302,8 @@ async def ejecutar_tool(tool_name, tool_args, contexto):
         # directo del webhook), nunca de tool_args — el modelo no puede
         # ni debe transportar ese dato, solo decide si aplica o no.
         base64_real = contexto.get("imagen_referencia_base64") if usar_referencia else None
-        resultado_imagen = await pedir_imagen_IA(tool_args.get("peticion"), chat_id, base64_img=base64_real)
+        mimetype_real = contexto.get("imagen_referencia_mimetype") if usar_referencia else None
+        resultado_imagen = await pedir_imagen_IA(tool_args.get("peticion"), chat_id, base64_img=base64_real, mimetype_img=mimetype_real)
         if isinstance(resultado_imagen, tuple) and len(resultado_imagen) > 0:
 
             primer_elemento = resultado_imagen[0]
@@ -1511,6 +1511,7 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
     idx_media_pesada = None
     tipo_media_pesada = None
     imagen_referencia_base64 = None
+    tipo_b64 = None
  
     if b64 is None:
         # salvaguarda: nunca dejar crecer el contexto indefinidamente con un solo mensaje
@@ -1592,6 +1593,7 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
             "reaccion_emoji": None,
             "texto_respuesta": None,
             "imagen_referencia_base64": imagen_referencia_base64,
+            "imagen_referencia_mimetype": tipo_b64,
         }
  
         contenido = ""
