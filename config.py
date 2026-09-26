@@ -66,5 +66,6 @@ class Settings:
     NVIDIA_API_KEY: str = os.getenv("NVIDIA_API_KEY", "xxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
     HF_API_TOKEN: str = os.getenv("HF_API_TOKEN", "xxx")
     PREFIJO_MENSAJE: str = os.getenv("PREFIJO_MENSAJE", "🔷 Gemma: ")
+    LID_BOT: str = os.getenv("LID_BOT", "@xxxxxx")
 
 settings = Settings()

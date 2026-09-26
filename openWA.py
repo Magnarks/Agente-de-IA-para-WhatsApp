@@ -11,12 +11,8 @@ ALIAS_RESERVADOS = {"gemma"}
  
 def construir_mapa_menciones(miembros):
     """
-    A partir de la lista de miembros (la que ya te da
-    consultar_usuarios_grupo), arma pares (alias, lid_numero),
-    ordenados por longitud de alias descendente (para que el regex
-    haga match greedy y no corte 'Nicole Vargas' como si fuera solo
-    'Nicole' antes de intentar el nombre completo).
- 
+    A partir de la lista de miembros, arma pares (alias, lid_numero),
+    ordenados por longitud de alias descendente.
     Cada persona genera 2 alias posibles: su nombre completo y su
     primer nombre, así el modelo puede escribir cualquiera de los dos
     y de todas formas resuelve al lid correcto.
@@ -45,11 +41,9 @@ def construir_mapa_menciones(miembros):
 def reemplazar_menciones(texto: str, miembros):
     """
     Busca '@Alias' en el texto que generó el modelo y lo reemplaza por
-    '@<lid_real>', tomado de la base de datos (no del texto del
-    modelo). Devuelve (texto_corregido, mentions) listo para mandarle
+    '@<lid_real>', tomado de la base de datos. Devuelve (texto_corregido, mentions) listo para mandarle
     a la API de OpenWA.
- 
-    '@clau' (y cualquier alias en ALIAS_RESERVADOS) se deja intacto,
+    Cualquier alias en ALIAS_RESERVADOS se deja intacto,
     tal cual lo escribió el modelo — sigue funcionando como
     disparador textual, no como mention real de WhatsApp.
     """

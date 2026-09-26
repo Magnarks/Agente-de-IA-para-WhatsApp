@@ -58,11 +58,6 @@ async def generar_reaccion_IA(emoji: str):
     return single_emoji
 
 async def pedir_imagen_IA(peticion: str, chat_id: str, base64_img: str = None, mimetype_img: str = None):
-    """
-    A diferencia de antes, ahora recibe chat_id: lo necesita para
-    poder mandar el aviso intermedio directamente por WhatsApp si el
-    Space está dormido, ANTES de esperar a que termine de generar.
-    """
     from openWA import enviar_mensaje  # import local para evitar import circular
  
     if await espacio_esta_dormido(SPACE_ID_IMAGENES, hf_token=settings.HF_API_TOKEN):
@@ -1174,8 +1169,7 @@ def construir_mapa_lid_a_nombre(miembros):
     Mapa lid_numero (string, sin '@') -> primer nombre. Se usa para
     traducir menciones crudas que llegan de WhatsApp ('@230369278316610')
     a algo legible ('@Daniel') ANTES de que el modelo procese el
-    mensaje. Así nunca ve números y no tiene tentación de copiarlos de
-    vuelta en su propia respuesta.
+    mensaje.
     """
     mapa = {}
     for m in miembros:
@@ -1192,8 +1186,7 @@ def construir_mapa_lid_a_nombre(miembros):
 def traducir_menciones_a_nombre(texto: str, miembros):
     """
     Reemplaza cada '@<lid>' crudo por '@Nombre' usando la lista de
-    miembros. Si el número no coincide con nadie conocido, lo deja tal
-    cual (no inventa nombres).
+    miembros. Si el número no coincide con nadie conocido, lo deja tal cual.
     """
     if not texto:
         return texto
@@ -1399,10 +1392,7 @@ def sanear_historial(historial: list) -> list:
     Revisa cada mensaje antes de mandarlo al modelo:
     - Si no es 'assistant' y no tiene 'content', se lo agrega vacío.
     - Si 'content' es None (cualquier rol), lo cambia a "".
-    Además imprime un [WARN] con el índice y el mensaje problemático,
-    para que puedas rastrear en tu código DÓNDE se está generando ese
-    mensaje corrupto y arreglarlo de raíz (esto es un parche de
-    seguridad, no reemplaza encontrar la causa real).
+    Además imprime un [WARN] con el índice y el mensaje problemático.
     """
     for i, msg in enumerate(historial):
         rol = msg.get("role")

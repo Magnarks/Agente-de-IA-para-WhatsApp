@@ -28,7 +28,7 @@ def is_duplicate_webhook(payload):
 
 def leer_archivo_como_base64(datos_binarios: bytes):
     """
-    Codifica bytes que YA tienes en memoria a base64.
+    Codifica bytes que a base64.
     """
     base64_string = base64.b64encode(datos_binarios).decode("utf-8")
     mimetype = magic.from_buffer(datos_binarios, mime=True)
@@ -98,7 +98,7 @@ async def webhook(request: Request):
                 id_citado = None
                 body_citado = ""
 
-            if tipo_mensaje == "text" and ("@gemma" in mensaje or settings.PREFIJO_MENSAJE in body_citado):
+            if tipo_mensaje == "text" and ("@gemma" in mensaje or settings.LID_BOT in mensaje or settings.PREFIJO_MENSAJE in body_citado):
                 print("Procesando mensaje de chat...", id_mensaje)
                 delivery_id = payload.get("deliveryId")
                 if id_citado is not None:
@@ -138,7 +138,7 @@ async def webhook(request: Request):
                     "response": respuesta
                 }                
             
-            elif tipo_mensaje == "image" and ("@gemma" in mensaje or settings.PREFIJO_MENSAJE in body_citado):
+            elif tipo_mensaje == "image" and ("@gemma" in mensaje or settings.LID_BOT in mensaje or settings.PREFIJO_MENSAJE in body_citado):
                 media = data.get("media", None)
                 if media is not None:
                     print("Procesando mensaje de imagen...", id_mensaje)
@@ -191,7 +191,7 @@ async def webhook(request: Request):
                 else:
                     return {"status": "error", "message": "No se pudo obtener los medios del mensaje."}          
 
-            elif tipo_mensaje == "document" and ("@gemma" in mensaje or settings.PREFIJO_MENSAJE in body_citado):
+            elif tipo_mensaje == "document" and ("@gemma" in mensaje or settings.LID_BOT in mensaje or settings.PREFIJO_MENSAJE in body_citado):
                 media = data.get("media", None)
                 if media is not None:
                     print("Procesando mensaje de documento...", id_mensaje)
@@ -221,7 +221,7 @@ async def webhook(request: Request):
                 else:
                     return {"status": "error", "message": "No se pudo obtener los medios del mensaje."}
 
-            elif tipo_mensaje == "video" and ("@gemma" in mensaje or settings.PREFIJO_MENSAJE in body_citado):
+            elif tipo_mensaje == "video" and ("@gemma" in mensaje or settings.LID_BOT in mensaje or settings.PREFIJO_MENSAJE in body_citado):
                 media = data.get("media", None)
                 if media is not None:
                     print("Procesando mensaje de video...", id_mensaje)
@@ -313,7 +313,7 @@ async def webhook(request: Request):
                 id_citado = None
                 body_citado = ""
 
-            if tipo_mensaje == "text" and ("@gemma" in mensaje or settings.PREFIJO_MENSAJE in body_citado):
+            if tipo_mensaje == "text" and ("@gemma" in mensaje or settings.LID_BOT in mensaje or settings.PREFIJO_MENSAJE in body_citado):
                 print("Procesando mensaje de chat...", id_mensaje)
                 delivery_id = payload.get("deliveryId")
                 if id_citado is not None:
@@ -352,7 +352,7 @@ async def webhook(request: Request):
                     "status": "ok",
                     "response": respuesta
                 }
-            elif tipo_mensaje == "image" and ("@gemma" in mensaje or settings.PREFIJO_MENSAJE in body_citado):
+            elif tipo_mensaje == "image" and ("@gemma" in mensaje or settings.LID_BOT in mensaje or settings.PREFIJO_MENSAJE in body_citado):
                 media = data.get("media", None)
                 if media is not None:
                     print("Procesando mensaje de imagen...", id_mensaje)
@@ -404,7 +404,7 @@ async def webhook(request: Request):
                 else:
                     return {"status": "error", "message": "No se pudo obtener los medios del mensaje."}   
 
-            elif tipo_mensaje == "document" and ("@gemma" in mensaje or settings.PREFIJO_MENSAJE in body_citado):
+            elif tipo_mensaje == "document" and ("@gemma" in mensaje or settings.LID_BOT in mensaje or settings.PREFIJO_MENSAJE in body_citado):
                 media = data.get("media", None)
                 if media is not None:
                     print("Procesando mensaje de documento...", id_mensaje)
@@ -434,7 +434,7 @@ async def webhook(request: Request):
                 else:
                     return {"status": "error", "message": "No se pudo obtener los medios del mensaje."}
 
-            elif tipo_mensaje == "video" and ("@gemma" in mensaje or settings.PREFIJO_MENSAJE in body_citado):
+            elif tipo_mensaje == "video" and ("@gemma" in mensaje or settings.LID_BOT in mensaje or settings.PREFIJO_MENSAJE in body_citado):
                 media = data.get("media", None)
                 if media is not None:
                     print("Procesando mensaje de video...", id_mensaje)

@@ -24,10 +24,6 @@ async def descargar_audio(url: str) -> str:
     return await asyncio.to_thread(_descargar_audio_sync, url)
 
 def _descargar_audio_sync(url: str) -> str:
-    """
-    La lógica de siempre, sin cambios — sigue siendo 100% síncrona.
-    La clave está en CÓMO se llama (ver descargar_audio abajo).
-    """
     yt = YouTube(url, on_progress_callback=on_progress)
     print(yt.title)
  

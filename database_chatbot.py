@@ -34,13 +34,6 @@ def consultar_media_mensaje_citado(id_chat, id_mensaje):
     return documento.get("media") if documento else None
         
 def consultar_mensajes(id_chat, limite=10):
-    """
-    Se excluye el campo 'media' con una proyección de Mongo: ese
-    campo guarda el base64 completo de imágenes/videos/documentos
-    (lo usa consultar_media_mensaje_citado), pero para armar el
-    contexto de conversación no lo necesitamos, y meterlo ahí infla
-    el prompt del modelo de forma masiva sin ningún beneficio.
-    """
     busqueda = db["historial_mensajes_" + id_chat].find(
         {},
         {"media": 0}
@@ -89,7 +82,7 @@ def limpiar_mensajes_antiguos(horas: int = 24):
     los mensajes con más de 'horas' de antigüedad. Detecta
     automáticamente cómo está guardado 'timestamp' en cada colección.
  
-    Pensada para llamarse una vez al arrancar tu app (en el startup
+    Pensada para llamarse una vez al arrancar el app (en el startup
     del lifespan), no en cada mensaje.
     """
     nombres_colecciones = [
