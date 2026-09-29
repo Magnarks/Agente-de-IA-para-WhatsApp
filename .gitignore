@@ -1,3 +1,4 @@
-.*json
-.*env
-.*pyc
+*.json
+*.env
+*.pyc
+__pycache__/
