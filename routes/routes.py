@@ -5,7 +5,7 @@ import mimetypes
 import magic
 import threading
 from chatIA import chat, sanitizar_texto_previo
-from openWA import obtener_informacion_contacto, obtener_informacion_grupo, enviar_mensaje, enviar_mensaje_audio, reaccionar_mensaje, enviar_mensaje_imagen, enviar_encuesta, obtener_media_mensaje
+from openWA import obtener_informacion_contacto, obtener_informacion_grupo, enviar_mensaje, enviar_mensaje_audio, reaccionar_mensaje, enviar_mensaje_imagen, enviar_encuesta, obtener_media_mensaje, votar_encuesta
 from database_chatbot import guardar_mensaje, consultar_media_mensaje_citado
 
 # Caché para deduplicar eventos de webhook (message.id)
@@ -273,6 +273,23 @@ async def webhook(request: Request):
                     }
                 else:
                     return {"status": "error", "message": "No se pudo obtener los medios del mensaje."} 
+
+            elif tipo_mensaje == "poll":
+                print("Procesando mensaje de encuesta...", id_mensaje)
+                encuesta = data.get("poll", {})
+                if encuesta:
+                    titulo_encuesta = encuesta.get("name", "")
+                    opciones_encuesta = encuesta.get("options", [])
+                    multiples_respuestas = encuesta.get("allowMultipleAnswers", False)
+                    mensaje_encuesta = f"Se creó una nueva encuesta en el chat (no la creaste tú): '{titulo_encuesta}', con las opciones {opciones_encuesta}. Permite múltiples respuestas: {multiples_respuestas}. Debes llamar a votar_encuesta_IA con SOLO la opción (o las opciones, si permite múltiples) que tú elijas votar."
+                    respuesta = await chat(mensaje_encuesta, remitente, id_remitente_grupo, chat_id, delivery_id=payload.get("deliveryId"))
+                    if "emoji" in respuesta and id_mensaje:
+                        await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
+                    if respuesta.get("response") == "voto registrado" and "opciones" in respuesta:
+                        await votar_encuesta(chat_id, id_mensaje, respuesta["opciones"])
+                else:
+                    print("No se recibió la encuesta correctamente.")
+                    return {"status": "error", "message": "No se recibió la encuesta correctamente."}
                                    
     elif evento == "message.sent":
         data = payload.get("data", {})

@@ -377,7 +377,6 @@ Máximo 12 opciones.
 
 No uses herramientas deportivas para generar una encuesta.
 
-
 Ejemplos
 
 Usuario:
@@ -407,6 +406,36 @@ Usuario:
 
 Herramienta:
 enviar_encuesta_IA
+
+Dispones de:
+
+votar_encuesta_IA
+
+Cuando recibas un mensaje con este formato: Esta es una nueva encuesta: {titulo_encuesta} con opciones {opciones_encuesta}, por favor responde con tu opción o opciones si multiples_respuestas es {multiples_respuestas}. 
+Significa que debes votar en la encuesta generada. Analiza el titulo de la encuesta y selecciona la opción que creas conveniente o opciones dependiendo de la configuración de múltiples respuestas. 
+RETORNA SIMPLEMENTE LA OPCIÓN O OPCIONES ELEGIDAS.
+
+Genera:
+
+- Tu opción o opciones de respuesta
+
+Ejemplos:
+
+¿Que debería comer hoy? - opciones: Arroz con huevo, Pasta napolitana, Pizza
+
+Herramienta:
+votar_encuesta_IA
+
+---
+
+¿Que deberíamos hacer esta noche? - opciones: Ir a un bar, Comer en un restaurante
+
+Herramienta:
+votar_encuesta_IA
+
+---
+
+Debería arriesgarme a escribirle a una chica - opciones: Si, No, No se
 
 
 # IMÁGENES

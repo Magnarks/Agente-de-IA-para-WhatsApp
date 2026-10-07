@@ -516,6 +516,12 @@ async def enviar_encuesta_IA(encuesta: str, opciones: list, multiple: bool = Fal
     print("Encuesta generada:", encuesta, opciones, multiple)
     return {"encuesta": encuesta, "opciones": opciones, "multiple": multiple}
 
+async def votar_encuesta_IA(opciones: list):
+    if not opciones:
+        return {"error": "Las opciones no pueden estar vacías."}
+    print("Opciones votadas:", opciones)
+    return {"status": "voto registrado", "opciones": opciones}
+
 def limpiar_tool_calls_texto(contenido: str, reaccion_emoji=None):
     """Elimina patrones de tool calls filtrados como texto y extrae emojis de generar_reaccion_IA."""
     if not contenido:
@@ -1118,6 +1124,27 @@ herramientas = [
                 "required": ["encuesta", "opciones"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "votar_encuesta_IA",
+            "description": """Cuando recibas un mensaje con este formato: Esta es una nueva encuesta: {titulo_encuesta} con opciones {opciones_encuesta}, por favor responde con tu opción o opciones si multiples_respuestas es {multiples_respuestas}. 
+                            Significa que debes votar en la encuesta generada. Analiza el titulo de la encuesta y selecciona la opción que creas conveniente o opciones dependiendo de la configuración de múltiples respuestas. 
+                            RETORNA SIMPLEMENTE LA OPCIÓN O OPCIONES ELEGIDAS.
+                            """,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "opciones_encuesta": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "SOLO la opción u opciones que TÚ eliges votar (tu decisión, no la lista completa de opciones disponibles). Debe ser un subconjunto de las opciones originales de la encuesta — nunca las devuelvas todas a menos que genuinamente quieras votar por todas."
+                    }
+                },
+                "required": ["opciones_encuesta"]
+            }
+        }
     }
 ]
 
@@ -1384,6 +1411,19 @@ async def ejecutar_tool(tool_name, tool_args, contexto):
                 response_data["emoji"] = contexto["reaccion_emoji"]
             return resultado_encuesta, response_data
         return resultado_encuesta, None
+
+    if tool_name == "votar_encuesta_IA":
+        opciones = tool_args.get("opciones_encuesta")
+        resultado_voto = await votar_encuesta_IA(opciones)
+        if "status" in resultado_voto:
+            response_data = {
+                "response": "voto registrado",
+                "opciones": resultado_voto["opciones"],
+            }
+            if contexto.get("reaccion_emoji"):
+                response_data["emoji"] = contexto["reaccion_emoji"]
+            return resultado_voto, response_data
+        return resultado_voto, None
  
     return "Función no reconocida", None
 

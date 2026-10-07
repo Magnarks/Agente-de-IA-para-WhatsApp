@@ -520,3 +520,29 @@ async def obtener_media_mensaje(contact_id, id_mensaje):
     except requests.exceptions.RequestException as e:
         print(f"Error en la solicitud: {e}")
         return None
+
+async def votar_encuesta(contact_id, id_mensaje, opciones):
+    api_url = f"{settings.OPENWA_BASE_URL}/api/sessions/{settings.OPENWA_SESSION_ID}/messages/vote-poll"
+    headers = {
+        "Accept": "*/*",
+        "Authorization": f"Bearer {settings.OPENWA_API_TOKEN}",
+    }
+    payload = {
+        "chatId": contact_id,
+        "pollMessageId": id_mensaje,
+        "options": opciones
+    }
+    try:
+        response = requests.post(api_url, headers=headers, json=payload)
+        if response.status_code == 200 or response.status_code == 201:
+            print("Voto enviado exitosamente.")
+            return True
+        else:
+            print("Error al enviar voto.", response.status_code, response.text)
+            return False
+    except requests.exceptions.Timeout:
+        print("Error: La solicitud ha excedido el tiempo de espera.")
+        return False
+    except requests.exceptions.RequestException as e:
+        print(f"Error en la solicitud: {e}")
+        return False
