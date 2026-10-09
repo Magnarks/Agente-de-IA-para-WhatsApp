@@ -23,6 +23,7 @@ import torch
 import gc
 import uuid
 import re
+import traceback
 
 load_dotenv(override=True)
 
@@ -1427,20 +1428,38 @@ async def ejecutar_tool(tool_name, tool_args, contexto):
  
     return "Función no reconocida", None
 
-def sanear_historial(historial: list) -> list:
+def sanear_historial(historial: list, usuario: str = "?") -> list:
     """
     Revisa cada mensaje antes de mandarlo al modelo:
     - Si no es 'assistant' y no tiene 'content', se lo agrega vacío.
     - Si 'content' es None (cualquier rol), lo cambia a "".
     Además imprime un [WARN] con el índice y el mensaje problemático.
     """
+    # for i, msg in enumerate(historial):
+    #     rol = msg.get("role")
+    #     if "content" not in msg:
+    #         print(f"[WARN] Mensaje #{i} (role={rol}) sin 'content': {msg}")
+    #         msg["content"] = "" if rol != "assistant" else None
+    #     elif msg["content"] is None and rol != "assistant":
+    #         print(f"[WARN] Mensaje #{i} (role={rol}) con content=None: {msg}")
+    #         msg["content"] = ""
+    # return historial
     for i, msg in enumerate(historial):
+        if not isinstance(msg, dict):
+            vecinos = [
+                (j, type(historial[j]).__name__,
+                 historial[j].get("role") if isinstance(historial[j], dict) else None)
+                for j in range(max(0, i - 1), min(len(historial), i + 3))
+            ]
+            print(f"[WARN] usuario={usuario!r}: elemento #{i} NO es dict "
+                  f"(largo={len(historial)}). Vecinos (idx, tipo, rol): {vecinos}. "
+                  f"Contenido: {str(msg)[:120]!r}")
+            historial[i] = {"role": "system", "content": str(msg)}
+            continue
         rol = msg.get("role")
         if "content" not in msg:
-            print(f"[WARN] Mensaje #{i} (role={rol}) sin 'content': {msg}")
             msg["content"] = "" if rol != "assistant" else None
         elif msg["content"] is None and rol != "assistant":
-            print(f"[WARN] Mensaje #{i} (role={rol}) con content=None: {msg}")
             msg["content"] = ""
     return historial
 
@@ -1454,7 +1473,7 @@ async def generar_caption_imagen_IA(usuario):
             "role": "user",
             "content": "Escribe un mensaje breve y natural (sin comillas) para acompañar la imagen que acabas de generar, como si fuera el pie de foto. Responde solo con ese texto."
         }]
-        mensajes_a_enviar = sanear_historial(mensajes_temp)
+        mensajes_a_enviar = sanear_historial(mensajes_temp, usuario)
         respuesta = client.chat.completions.create(
             model=MODEL_NAME,
             messages=mensajes_a_enviar,
@@ -1631,7 +1650,7 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
  
         for _ in range(MAX_ITERACIONES_TOOLS):
             print(f"[DEBUG] Enviando al modelo con {len(historial_conversacion[usuario])} mensajes")
-            mensajes_a_enviar = sanear_historial(historial_conversacion[usuario])
+            mensajes_a_enviar = sanear_historial(historial_conversacion[usuario], usuario)
             respuesta = client.chat.completions.create(
                 model=MODEL_NAME,
                 messages=mensajes_a_enviar,
@@ -1739,7 +1758,7 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
         if not contenido:
             print("[WARN] Contenido vacío, forzando respuesta de texto con tool_choice='none'")
             try:
-                mensajes_a_enviar = sanear_historial(historial_conversacion[usuario])
+                mensajes_a_enviar = sanear_historial(historial_conversacion[usuario], usuario)
                 fallback_resp = client.chat.completions.create(
                     model=MODEL_NAME,
                     messages=mensajes_a_enviar,
@@ -1757,6 +1776,8 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
             response_data["emoji"] = reaccion_emoji
         return response_data
     except Exception as e:
+        print(f"[ERROR] Excepción en chat() para usuario={usuario}:")
+        print(traceback.format_exc())
         return {"error": str(e)}
     finally:
         # Se ejecuta SIEMPRE al salir de chat(), sin importar si fue un
