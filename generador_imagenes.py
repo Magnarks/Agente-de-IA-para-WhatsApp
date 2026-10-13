@@ -35,41 +35,50 @@ def _generar_imagen_sync(space_id: str, prompt: str, hf_token: str = None, timeo
         with open(ruta_imagen_referencia, "wb") as f:
             f.write(imagen_bytes)
         imagen_referencia = handle_file(ruta_imagen_referencia)
-    for intento in range(1, max_intentos + 1):
-        try:
-            client = Client(
-                space_id,
-                token=hf_token,
-                httpx_kwargs={"timeout": timeout_segundos},
-            )
-            return client.predict(
-                param_0="edit" if base64_img else "text2image",
-                param_1=prompt,
-                param_2=prompt if base64_img else "",
-                param_3=imagen_referencia if imagen_referencia else handle_file('https://raw.githubusercontent.com/gradio-app/gradio/main/test/test_files/bus.png'),
-                param_4=imagen_referencia if imagen_referencia else handle_file('https://raw.githubusercontent.com/gradio-app/gradio/main/test/test_files/bus.png'),
-                param_5=width,
-                param_6=height,
-                param_7=1.4,
-                param_8=768,
-                param_9=1,
-                param_10=1,
-                param_11=steps,
-                param_12=1,
-                param_13="euler",
-                param_14="beta",
-                param_15=seed,
-                param_16=True,
-                param_19="Hello!!",
-                param_20="Hello!!",
-                param_21="Hello!!",
-                api_name="/_generate_wrapper"
-            )
-        except Exception as e:
-            ultimo_error = e
-            print(f"[WARN] Intento {intento}/{max_intentos} generando imagen falló: {e}")
-            if intento < max_intentos:
-                time.sleep(10)
+        for intento in range(1, max_intentos + 1):
+            try:
+                client = Client(
+                    space_id,
+                    token=hf_token,
+                    httpx_kwargs={"timeout": timeout_segundos},
+                )
+                return client.predict(
+                    prompt=prompt,
+                    input_image=imagen_referencia if imagen_referencia else handle_file('https://raw.githubusercontent.com/gradio-app/gradio/main/test/test_files/bus.png'),
+                    extra_images=[],
+                    steps=28,
+                    seed=0,
+                    randomize_seed=True,
+                    lora_scale=1.0,
+                    api_name="/edit",
+                )
+            except Exception as e:
+                ultimo_error = e
+                print(f"[WARN] Intento {intento}/{max_intentos} generando imagen falló: {e}")
+                if intento < max_intentos:
+                    time.sleep(10)
+    else:
+        for intento in range(1, max_intentos + 1):
+            try:
+                client = Client(
+                    space_id,
+                    token=hf_token,
+                    httpx_kwargs={"timeout": timeout_segundos},
+                )
+                return client.predict(
+                    prompt=prompt,
+                    size="1024x1024 (1:1)",
+                    steps=28,
+                    seed=0,
+                    randomize_seed=True,
+                    lora_scale=1.0,
+                    api_name="/generate",
+                )
+            except Exception as e:
+                ultimo_error = e
+                print(f"[WARN] Intento {intento}/{max_intentos} generando imagen falló: {e}")
+                if intento < max_intentos:
+                    time.sleep(10)
     raise ultimo_error
  
  
