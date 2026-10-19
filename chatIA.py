@@ -530,10 +530,16 @@ def limpiar_tool_calls_texto(contenido: str, reaccion_emoji=None):
 
     emoji = reaccion_emoji
 
+    # Aviso para saber qué tan seguido se filtra una tool call como texto
+    if re.search(r'call:\w+_IA\{', contenido, flags=re.IGNORECASE):
+        print(f"[WARN] Tool call filtrada como texto en la respuesta: {contenido[:120]!r}")
+
     # Extraer emoji de generar_reaccion_IA en cualquier formato conocido
     patrones_emoji = [
         # Formato nativo de Gemma 4 filtrado como texto: call:generar_reaccion_IA{emoji:<|"|>👏<|"|>}
         r'call:generar_reaccion_IA\{\s*emoji\s*:\s*(?:<\|"\|>|")?\s*([^<"}\s]+)\s*(?:<\|"\|>|")?\s*\}',
+        # Formato estilo Python filtrado: generar_reaccion_IA(emoji="😂")
+        r'generar_reaccion_IA\(\s*emoji\s*=\s*["\']?([^"\')\s]+)["\']?\s*\)',
         r'<\|tool_call>call:generar_reaccion_IA\{emoji:"([^"]+)"\}<tool_call\|>',
         r'\[Tool call: generar_reaccion_IA\(emoji=["\']?([^\'"\)\]]+)["\']?\)\]',
         r'<tool_call>\s*generar_reaccion_IA[^<]*emoji["\s:=]+([^\s"\'<,}\]]+)',
@@ -554,6 +560,8 @@ def limpiar_tool_calls_texto(contenido: str, reaccion_emoji=None):
         r'\{[^{}]*["\']?action["\']?\s*:\s*["\'][^"\']+["\'][^{}]*\}',
         # Formato nativo de Gemma 4 filtrado (cualquier tool terminada en _IA)
         r'call:\w+_IA\{.*?\}',
+        # Formato estilo Python filtrado (cualquier tool terminada en _IA)
+        r'\b\w+_IA\([^)]*\)',
     ]:
         contenido = re.sub(patron, '', contenido, flags=re.DOTALL | re.IGNORECASE)
 
