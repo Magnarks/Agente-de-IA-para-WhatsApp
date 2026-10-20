@@ -37,7 +37,7 @@ contador_llamadas = {}
 RECARGAR_CADA = 10  # Recargar memorias y fecha cada N llamadas por usuario
 
 # Ajusta esto al Space y token que estés usando
-SPACE_ID_IMAGENES = "vclnhihihi/qwen-image-21-uncensored"  # o el Space que estés usando en ese momento
+SPACE_ID_IMAGENES = "fishpasters/uncensored-imageTOimage2Ref"  # o el Space que estés usando en ese momento
 
 #fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
