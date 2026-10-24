@@ -1,4 +1,3 @@
-from dotenv import load_dotenv
 import openai
 import json
 from config import settings
@@ -25,7 +24,6 @@ import uuid
 import re
 import traceback
 
-load_dotenv(override=True)
 
 client = openai.OpenAI(base_url=settings.OPENAI_API_BASE_URL, api_key=settings.OPENAI_API_KEY)
 MODEL_NAME = settings.MODEL_NAME
@@ -1604,7 +1602,7 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
                 )
                 wav_bytes = process.stdout
                 wav_base64 = base64.b64encode(wav_bytes).decode()
-                historial_conversacion[usuario].append({"role": "user", "content": [{"type": "text", "text": "Si NO escuchas las palabras: gemma o gema responde exactamente: IGNORAR_AUDIO Sin explicaciones adicionales. Si en cambio si escuchas gemma o gema, responde normalmente."}, {"type": "input_audio", "input_audio": {"data": wav_base64, "format": "wav"}}]})
+                historial_conversacion[usuario].append({"role": "user", "content": [{"type": "text", "text": "Si NO escuchas las palabras: gemma, Gemma o gema (tu nombre) responde exactamente: IGNORAR_AUDIO Sin explicaciones adicionales. Si en cambio si escuchas gemma, Gemma o gema (tu nombre), responde normalmente."}, {"type": "input_audio", "input_audio": {"data": wav_base64, "format": "wav"}}]})
                 idx_media_pesada = len(historial_conversacion[usuario]) - 1
                 tipo_media_pesada = "audio"
                 # buscando_gemma = await transcribir_con_whisper_local(wav_bytes)

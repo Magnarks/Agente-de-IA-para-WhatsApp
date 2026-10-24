@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Request, HTTPException
 from config import settings
 import base64
-import mimetypes
 import magic
 import threading
 from chatIA import chat, sanitizar_texto_previo
