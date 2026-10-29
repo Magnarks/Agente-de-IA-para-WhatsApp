@@ -23,9 +23,9 @@ import gc
 import uuid
 import re
 import traceback
+import httpx
 
-
-client = openai.OpenAI(base_url=settings.OPENAI_API_BASE_URL, api_key=settings.OPENAI_API_KEY)
+client = openai.OpenAI(base_url=settings.OPENAI_API_BASE_URL, api_key=settings.OPENAI_API_KEY, timeout=httpx.Timeout(120.0, connect=5.0), max_retries=0)
 MODEL_NAME = settings.MODEL_NAME
 
 SYSTEM_MESSAGE = settings.SYSTEM_MESSAGE
@@ -35,7 +35,7 @@ contador_llamadas = {}
 RECARGAR_CADA = 10  # Recargar memorias y fecha cada N llamadas por usuario
 
 # Ajusta esto al Space y token que estés usando
-SPACE_ID_IMAGENES = "fishpasters/uncensored-imageTOimage2Ref"  # o el Space que estés usando en ese momento
+SPACE_ID_IMAGENES = "Magnarks/qwen-image-2.1-uc"  # o el Space que estés usando en ese momento
 
 #fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -52,7 +52,8 @@ async def generar_resumen_IA(id_chat: str, numero_mensajes: int = 10):
         return resumen
     
 async def generar_reaccion_IA(emoji: str):
-    single_emoji = emoji.strip().split()[0] if emoji.strip() else "👍"
+    emoji = (emoji or "").strip()
+    single_emoji = emoji.split()[0] if emoji else "👍"
     print("Emoji generado:", single_emoji)
     return single_emoji
 
@@ -525,16 +526,16 @@ def limpiar_tool_calls_texto(contenido: str, reaccion_emoji=None):
     """Elimina patrones de tool calls filtrados como texto y extrae emojis de generar_reaccion_IA."""
     if not contenido:
         return contenido, reaccion_emoji
-
+ 
     emoji = reaccion_emoji
-
+ 
     # Aviso para saber qué tan seguido se filtra una tool call como texto
-    if re.search(r'call:\w+_IA\{', contenido, flags=re.IGNORECASE):
+    if re.search(r'call:\w+_IA\{|\b\w+_IA\(', contenido, flags=re.IGNORECASE):
         print(f"[WARN] Tool call filtrada como texto en la respuesta: {contenido[:120]!r}")
-
+ 
     # Extraer emoji de generar_reaccion_IA en cualquier formato conocido
     patrones_emoji = [
-        # Formato nativo de Gemma 4 filtrado como texto: call:generar_reaccion_IA{emoji:<|"|>👏<|"|>}
+        # Formato nativo de Gemma 4 filtrado: call:generar_reaccion_IA{emoji:<|"|>👏<|"|>}
         r'call:generar_reaccion_IA\{\s*emoji\s*:\s*(?:<\|"\|>|")?\s*([^<"}\s]+)\s*(?:<\|"\|>|")?\s*\}',
         # Formato estilo Python filtrado: generar_reaccion_IA(emoji="😂")
         r'generar_reaccion_IA\(\s*emoji\s*=\s*["\']?([^"\')\s]+)["\']?\s*\)',
@@ -548,7 +549,7 @@ def limpiar_tool_calls_texto(contenido: str, reaccion_emoji=None):
             raw = match.group(1).strip()
             emoji = raw.split()[0] if raw else "👍"
             break
-
+ 
     # Eliminar todos los patrones conocidos de tool calls
     for patron in [
         r'<\|tool_call>.*?<tool_call\|>',
@@ -559,13 +560,13 @@ def limpiar_tool_calls_texto(contenido: str, reaccion_emoji=None):
         # Formato nativo de Gemma 4 filtrado (cualquier tool terminada en _IA)
         r'call:\w+_IA\{.*?\}',
         # Formato estilo Python filtrado (cualquier tool terminada en _IA)
-        r'\b\w+_IA\([^)]*\)',
+        r'(?:Tool call:\s*)?`?\b\w+_IA\([^)]*\)`?',
     ]:
         contenido = re.sub(patron, '', contenido, flags=re.DOTALL | re.IGNORECASE)
-
+ 
     # Restos sueltos de tokens especiales de Gemma (<|"|>, <|tool_call>, etc.)
     contenido = re.sub(r'<\|"\|>|<\|?/?tool_call\|?>', '', contenido)
-
+ 
     return contenido.strip(), emoji
 
 def consultar_internet_IA(buscar: str):
@@ -1281,7 +1282,10 @@ async def ejecutar_tool(tool_name, tool_args, contexto):
     if tool_name == "generar_reaccion_IA":
         if contexto.get("reaccion_emoji"):
             return {"emoji": contexto["reaccion_emoji"], "ya_registrada": True}, None
-        contexto["reaccion_emoji"] = await generar_reaccion_IA(tool_args.get("emoji"))
+        emoji_arg = tool_args.get("emoji")
+        if not emoji_arg and tool_args:
+            emoji_arg = next((v for v in tool_args.values() if isinstance(v, str)), None)
+        contexto["reaccion_emoji"] = await generar_reaccion_IA(emoji_arg)
         return {"emoji": contexto["reaccion_emoji"]}, None
  
     if tool_name == "generar_resumen_IA":
@@ -1476,6 +1480,38 @@ def sanear_historial(historial: list, usuario: str = "?") -> list:
             msg["content"] = ""
     return historial
 
+def llamar_modelo(**kwargs):
+    """
+    Único punto por donde se llama al modelo. Centralizar esto garantiza
+    que TODAS las llamadas (loop de tools, fallback, captions, resúmenes)
+    tengan tope de tokens, y deja un solo lugar para manejar bucles.
+ 
+    Un bucle de generación se detecta de dos formas:
+      - APITimeoutError: el cliente cortó a los 120 s.
+      - finish_reason == "length": llegó al tope de tokens sin terminar.
+    En ambos casos se reintenta UNA vez con penalización de repetición.
+    Si el reintento también llega al tope, se lanza un error en vez de
+    mandar al grupo un texto cortado por la mitad o repetido.
+ 
+    Para una llamada que legítimamente necesite más (un resumen largo),
+    sube el tope solo ahí: llamar_modelo(..., max_tokens=4096)
+    """
+    # kwargs.setdefault("max_tokens", MAX_TOKENS_POR_DEFECTO)
+ 
+    try:
+        respuesta = client.chat.completions.create(**kwargs)
+        if respuesta.choices[0].finish_reason != "length":
+            return respuesta
+        print("[WARN] El modelo llegó al tope de tokens sin terminar (posible bucle).")
+    except openai.APITimeoutError:
+        print("[WARN] Timeout del modelo (posible bucle de generación).")
+ 
+    print("[WARN] Reintentando una vez con penalización de repetición...")
+    respuesta = client.chat.completions.create(**kwargs, extra_body={"repeat_penalty": 1.15, "dry_multiplier": 0.8})
+    if respuesta.choices[0].finish_reason == "length":
+        raise RuntimeError("El modelo no logró cerrar la respuesta tras el reintento (posible bucle).")
+    return respuesta
+
 async def generar_caption_imagen_IA(usuario):
     """Pide al modelo un texto corto para acompañar la imagen/meme recién generado.
     Necesario porque el modelo no puede devolver content + tool_calls a la vez,
@@ -1487,12 +1523,15 @@ async def generar_caption_imagen_IA(usuario):
             "content": "Escribe un mensaje breve y natural (sin comillas) para acompañar la imagen que acabas de generar, como si fuera el pie de foto. Responde solo con ese texto."
         }]
         mensajes_a_enviar = sanear_historial(mensajes_temp, usuario)
-        respuesta = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=mensajes_a_enviar,
-            tools=herramientas,
-            tool_choice="none"
+        respuesta = await asyncio.to_thread(
+            llamar_modelo, model=MODEL_NAME, messages=mensajes_a_enviar, tools=herramientas, tool_choice="none"
         )
+        # respuesta = llamar_modelo(
+        #     model=MODEL_NAME,
+        #     messages=mensajes_a_enviar,
+        #     tools=herramientas,
+        #     tool_choice="none"
+        # )
         caption = respuesta.choices[0].message.content or ""
         caption, _ = limpiar_tool_calls_texto(caption)
         return caption
@@ -1602,7 +1641,7 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
                 )
                 wav_bytes = process.stdout
                 wav_base64 = base64.b64encode(wav_bytes).decode()
-                historial_conversacion[usuario].append({"role": "user", "content": [{"type": "text", "text": "Si NO escuchas las palabras: gemma, Gemma o gema (tu nombre) responde exactamente: IGNORAR_AUDIO Sin explicaciones adicionales. Si en cambio si escuchas gemma, Gemma o gema (tu nombre), responde normalmente."}, {"type": "input_audio", "input_audio": {"data": wav_base64, "format": "wav"}}]})
+                historial_conversacion[usuario].append({"role": "user", "content": [{"type": "text", "text": "Si NO escuchas las palabras: gemma, Gemma o gema (tu nombre) responde exactamente y SOLO exactamente: IGNORAR_AUDIO. Sin dar explicaciones adicionales NO RESPONDAS cosas como (\"Hágale, anotado. Si no sale mi nombre en el audio, me quedo muda como una estatua\"). Si en cambio si escuchas gemma, Gemma o gema (tu nombre), responde normalmente."}, {"type": "input_audio", "input_audio": {"data": wav_base64, "format": "wav"}}]})
                 idx_media_pesada = len(historial_conversacion[usuario]) - 1
                 tipo_media_pesada = "audio"
                 # buscando_gemma = await transcribir_con_whisper_local(wav_bytes)
@@ -1664,11 +1703,21 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
         for _ in range(MAX_ITERACIONES_TOOLS):
             print(f"[DEBUG] Enviando al modelo con {len(historial_conversacion[usuario])} mensajes")
             mensajes_a_enviar = sanear_historial(historial_conversacion[usuario], usuario)
-            respuesta = client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=mensajes_a_enviar,
-                tools=herramientas
+
+            herramientas_turno = herramientas
+            if contexto.get("reaccion_emoji"):
+                herramientas_turno = [t for t in herramientas
+                if t["function"]["name"] != "generar_reaccion_IA"]
+
+            respuesta = await asyncio.to_thread(
+                llamar_modelo, model=MODEL_NAME, messages=mensajes_a_enviar, tools=herramientas_turno
             )
+
+            # respuesta = client.chat.completions.create(
+            #     model=MODEL_NAME,
+            #     messages=mensajes_a_enviar,
+            #     tools=herramientas
+            # )
             msg = respuesta.choices[0].message
             print(f"[DEBUG] Tool calls: {msg.tool_calls}")
             print(f"[DEBUG] content: {msg.content!r}")
@@ -1702,7 +1751,13 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
                 tool_args = json.loads(tool_call.function.arguments)
                 print(f"Ejecutando herramienta: {tool_name} con args: {tool_args}")
  
-                resultado, posible_respuesta_temprana = await ejecutar_tool(tool_name, tool_args, contexto)
+                try:
+                    resultado, posible_respuesta_temprana = await ejecutar_tool(tool_name, tool_args, contexto)
+                except Exception as e:
+                    print(f"[ERROR] Falló la herramienta {tool_name} con args {tool_args}: {e}")
+                    print(traceback.format_exc())
+                    resultado = {"error": f"La herramienta {tool_name} falló: {e}"}
+                    posible_respuesta_temprana = None
                 if posible_respuesta_temprana is not None:
                     respuesta_temprana = posible_respuesta_temprana
  
@@ -1772,12 +1827,15 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
             print("[WARN] Contenido vacío, forzando respuesta de texto con tool_choice='none'")
             try:
                 mensajes_a_enviar = sanear_historial(historial_conversacion[usuario], usuario)
-                fallback_resp = client.chat.completions.create(
-                    model=MODEL_NAME,
-                    messages=mensajes_a_enviar,
-                    tools=herramientas,
-                    tool_choice="none"
+                fallback_resp = await asyncio.to_thread(
+                    llamar_modelo, model=MODEL_NAME, messages=mensajes_a_enviar, tools=herramientas, tool_choice="none"
                 )
+                # fallback_resp = client.chat.completions.create(
+                #     model=MODEL_NAME,
+                #     messages=mensajes_a_enviar,
+                #     tools=herramientas,
+                #     tool_choice="none"
+                # )
                 contenido = fallback_resp.choices[0].message.content or ""
                 contenido, reaccion_emoji = limpiar_tool_calls_texto(contenido, reaccion_emoji)
             except Exception as fe:
