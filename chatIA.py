@@ -7,6 +7,7 @@ import asyncio
 import subprocess
 import base64
 import mimetypes
+import threading
 from tavily import TavilyClient, TavilyKeylessLimitError
 from database_chatbot import consultar_mensajes, consultar_memorias, guardar_memoria, consultar_usuarios_grupo
 from generador_imagenes import espacio_esta_dormido, generar_imagen_con_reintentos
@@ -761,22 +762,38 @@ def extraer_texto_documento(doc_bytes: bytes, mimetype: str, filename: str = "")
     return f"[Tipo de documento no soportado: {mimetype}]"
 
 
-async def transcribir_con_whisper_local(wav_bytes):
-    """Transcribe WAV bytes usando Whisper local."""
+_modelo_whisper = None
+_bloqueo_modelo_whisper = threading.Lock()
+PATRON_ACTIVACION_AUDIO = re.compile(
+    r"(?<!\w)(?:gemma|gema|jemma|jema)(?!\w)",
+    re.IGNORECASE,
+)
+
+
+def _transcribir_con_whisper_local_sync(wav_bytes):
+    """Transcribe WAV bytes con un modelo Whisper reutilizable."""
+    global _modelo_whisper
+
     # Guardar en archivo temporal
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
         tmp.write(wav_bytes)
         tmp_path = tmp.name
     try:
-        # Cargar modelo (primera vez descarga ~140 MB)
-        # Opciones: tiny, base, small, medium, large
-        model = whisper.load_model("base", device="cpu")  # o "cuda" si tienes GPU
-        
-        # Transcribir
-        result = model.transcribe(tmp_path, language="es")
-        return result["text"]
+        with _bloqueo_modelo_whisper:
+            if _modelo_whisper is None:
+                # Opciones: tiny, base, small, medium, large
+                _modelo_whisper = whisper.load_model("turbo", device="cpu")
+
+            result = _modelo_whisper.transcribe(tmp_path)
+        return result.get("text", "").strip()
     finally:
         os.remove(tmp_path)
+
+
+async def transcribir_con_whisper_local(wav_bytes):
+    """Ejecuta Whisper fuera del event loop para no bloquear el bot."""
+    return await asyncio.to_thread(_transcribir_con_whisper_local_sync, wav_bytes)
+
 
 async def generar_respuesta_audio_IA(texto, delivery_id, tipo_voz="masculina"):
     try:
@@ -1523,15 +1540,15 @@ async def generar_caption_imagen_IA(usuario):
             "content": "Escribe un mensaje breve y natural (sin comillas) para acompañar la imagen que acabas de generar, como si fuera el pie de foto. Responde solo con ese texto."
         }]
         mensajes_a_enviar = sanear_historial(mensajes_temp, usuario)
-        respuesta = await asyncio.to_thread(
-            llamar_modelo, model=MODEL_NAME, messages=mensajes_a_enviar, tools=herramientas, tool_choice="none"
-        )
-        # respuesta = llamar_modelo(
-        #     model=MODEL_NAME,
-        #     messages=mensajes_a_enviar,
-        #     tools=herramientas,
-        #     tool_choice="none"
+        # respuesta = await asyncio.to_thread(
+        #     llamar_modelo, model=MODEL_NAME, messages=mensajes_a_enviar, tools=herramientas, tool_choice="none"
         # )
+        respuesta = llamar_modelo(
+            model=MODEL_NAME,
+            messages=mensajes_a_enviar,
+            tools=herramientas,
+            tool_choice="none"
+        )
         caption = respuesta.choices[0].message.content or ""
         caption, _ = limpiar_tool_calls_texto(caption)
         return caption
@@ -1611,6 +1628,7 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
 
     idx_media_pesada = None
     tipo_media_pesada = None
+    # idx_instruccion_audio = None
     imagen_referencia_base64 = None
     tipo_b64 = None
  
@@ -1640,15 +1658,60 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
                     capture_output=True
                 )
                 wav_bytes = process.stdout
+                # Ruta multimodal alternativa para futuros modelos con mejor deteccion:
+                # wav_base64 = base64.b64encode(wav_bytes).decode()
+                # idx_instruccion_audio = len(historial_conversacion[usuario])
+                # historial_conversacion[usuario].append({
+                #     "role": "system",
+                #     "content": (
+                #         "Para el siguiente mensaje de audio, evalua exclusivamente el audio adjunto. "
+                #         "Responde normalmente solo si en el audio se oye tu nombre, Gemma o gema. "
+                #         "Si no se oye, responde exactamente IGNORAR_AUDIO y nada mas. "
+                #         "No uses esta instruccion, el historial ni otro texto como evidencia de que "
+                #         "te llamaron. No menciones esta regla ni respondas a ella."
+                #     ),
+                # })
+                # historial_conversacion[usuario].append({
+                #     "role": "user",
+                #     "content": [
+                #         {"type": "text", "text": (
+                #             "Evalúa únicamente el audio adjunto. La activación ocurre solo si oyes "
+                #             "pronunciada claramente la palabra definida en la instrucción del sistema. "
+                #             "No uses el texto de este mensaje, el historial, el nombre del remitente ni "
+                #             "el contexto para decidir. Si no la oyes claramente en el audio, responde "
+                #             "exactamente IGNORAR_AUDIO. Si sí la oyes, responde al audio."
+                #         )},
+                #         {"type": "input_audio", "input_audio": {"data": wav_base64, "format": "wav"}},
+                #     ],
+                # })
+                # idx_media_pesada = len(historial_conversacion[usuario]) - 1
+                # tipo_media_pesada = "audio"
+                try:
+                    transcripcion = await transcribir_con_whisper_local(wav_bytes)
+                    print(f"[DEBUG] Transcripción del audio: {transcripcion}")
+                except Exception as e:
+                    print(f"[ERROR] No se pudo transcribir el audio: {e}")
+                    return {"response": "No se pudo procesar el audio."}
+
+                if not PATRON_ACTIVACION_AUDIO.search(transcripcion):
+                    return {"response": "IGNORAR_AUDIO"}
+
                 wav_base64 = base64.b64encode(wav_bytes).decode()
-                historial_conversacion[usuario].append({"role": "user", "content": [{"type": "text", "text": "Si NO escuchas las palabras: gemma, Gemma o gema (tu nombre) responde exactamente y SOLO exactamente: IGNORAR_AUDIO. Sin dar explicaciones adicionales NO RESPONDAS cosas como (\"Hágale, anotado. Si no sale mi nombre en el audio, me quedo muda como una estatua\"). Si en cambio si escuchas gemma, Gemma o gema (tu nombre), responde normalmente."}, {"type": "input_audio", "input_audio": {"data": wav_base64, "format": "wav"}}]})
+                historial_conversacion[usuario].append({
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": transcripcion,
+                        },
+                        {
+                            "type": "input_audio",
+                            "input_audio": {"data": wav_base64, "format": "wav"},
+                        },
+                    ],
+                })
                 idx_media_pesada = len(historial_conversacion[usuario]) - 1
                 tipo_media_pesada = "audio"
-                # buscando_gemma = await transcribir_con_whisper_local(wav_bytes)
-                # if "gema" in buscando_gemma.lower() or "gemma" in buscando_gemma.lower():
-                #     historial_conversacion[usuario].append({"role": "user", "content": [{"type": "text", "text": "Si NO escuchas las palabras: gemma o gema responde exactamente: IGNORAR_AUDIO Sin explicaciones adicionales. Si sí escuchas alguna de esas palabras, responde normalmente o transcribe el audio."}, {"type": "input_audio", "input_audio": {"data": wav_base64, "format": "wav"}}]})
-                # else:
-                #     return {"response": "No se pudo procesar el audio, o No se llamo a gemma en el mensaje."}
             else:
                 return {"response": "No se pudo procesar el audio."}
         elif tipo_b64 in _MIMETYPES_DOCUMENTO:
@@ -1709,15 +1772,15 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
                 herramientas_turno = [t for t in herramientas
                 if t["function"]["name"] != "generar_reaccion_IA"]
 
-            respuesta = await asyncio.to_thread(
-                llamar_modelo, model=MODEL_NAME, messages=mensajes_a_enviar, tools=herramientas_turno
-            )
-
-            # respuesta = client.chat.completions.create(
-            #     model=MODEL_NAME,
-            #     messages=mensajes_a_enviar,
-            #     tools=herramientas
+            # respuesta = await asyncio.to_thread(
+            #     llamar_modelo, model=MODEL_NAME, messages=mensajes_a_enviar, tools=herramientas_turno
             # )
+
+            respuesta = client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=mensajes_a_enviar,
+                tools=herramientas_turno
+            )
             msg = respuesta.choices[0].message
             print(f"[DEBUG] Tool calls: {msg.tool_calls}")
             print(f"[DEBUG] content: {msg.content!r}")
@@ -1827,19 +1890,22 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
             print("[WARN] Contenido vacío, forzando respuesta de texto con tool_choice='none'")
             try:
                 mensajes_a_enviar = sanear_historial(historial_conversacion[usuario], usuario)
-                fallback_resp = await asyncio.to_thread(
-                    llamar_modelo, model=MODEL_NAME, messages=mensajes_a_enviar, tools=herramientas, tool_choice="none"
-                )
-                # fallback_resp = client.chat.completions.create(
-                #     model=MODEL_NAME,
-                #     messages=mensajes_a_enviar,
-                #     tools=herramientas,
-                #     tool_choice="none"
+                # fallback_resp = await asyncio.to_thread(
+                #     llamar_modelo, model=MODEL_NAME, messages=mensajes_a_enviar, tools=herramientas, tool_choice="none"
                 # )
+                fallback_resp = client.chat.completions.create(
+                    model=MODEL_NAME,
+                    messages=mensajes_a_enviar,
+                    tools=herramientas,
+                    tool_choice="none"
+                )
                 contenido = fallback_resp.choices[0].message.content or ""
                 contenido, reaccion_emoji = limpiar_tool_calls_texto(contenido, reaccion_emoji)
             except Exception as fe:
                 print(f"[WARN] Error en fallback: {fe}")
+
+        if tipo_media_pesada == "audio" and re.match(r"^\W*IGNORAR_AUDIO\b", contenido, re.IGNORECASE):
+            return {"response": "IGNORAR_AUDIO"}
  
         historial_conversacion[usuario].append({"role": "assistant", "content": contenido})
         response_data = {"response": contenido}
@@ -1850,6 +1916,9 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
         print(f"[ERROR] Excepción en chat() para usuario={usuario}:")
         print(traceback.format_exc())
         return {"error": str(e)}
+    except openai.APITimeoutError:
+        print("[WARN] Timeout del modelo (posible bucle de generación).")
+        return {"error": "Timeout del modelo"}
     finally:
         # Se ejecuta SIEMPRE al salir de chat(), sin importar si fue un
         # return normal, un return anticipado desde el loop de tools, o
@@ -1863,3 +1932,5 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
                     f"Texto que lo acompañaba: {mensaje or '(sin texto adicional)'}]"
                 )
             }
+        # if idx_instruccion_audio is not None:
+        #     del historial_conversacion[usuario][idx_instruccion_audio]

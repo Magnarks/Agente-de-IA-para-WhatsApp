@@ -111,6 +111,8 @@ async def webhook(request: Request):
                 else:
                     respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, delivery_id=delivery_id)
                 print(f"Respuesta generada: {respuesta}")
+                if respuesta.get("response") == "IGNORAR_AUDIO":
+                    return {"status": "ok", "response": respuesta}
                 if "emoji" in respuesta and id_mensaje:
                     await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
                 if respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
@@ -175,7 +177,7 @@ async def webhook(request: Request):
                 else:
                     return {"status": "error", "message": "No se pudo obtener los medios del mensaje."}     
                 
-            elif (tipo_mensaje == "ptt" or tipo_mensaje == "audio" or tipo_mensaje == "voice") and chat_id == settings.DEFAULT_GROUP.split(",")[0]:
+            elif (tipo_mensaje == "ptt" or tipo_mensaje == "audio" or tipo_mensaje == "voice"):
                 media = data.get("media", None)
                 if media is not None:
                     print("Procesando mensaje de voz...", id_mensaje)
@@ -187,6 +189,8 @@ async def webhook(request: Request):
                         await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
                     elif respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
                         await enviar_mensaje_audio(chat_id, respuesta["audio_file"], voz=respuesta.get("voz", False))
+                    elif respuesta.get("response") == "imagen generada" and "image_file" in respuesta:
+                        await enviar_mensaje_imagen(chat_id, base64_image=respuesta["image_file"], mimetype=respuesta.get("mimetype", "image/jpeg"), mensaje=f"{settings.PREFIJO_MENSAJE} {respuesta.get("caption", "")}")
                     elif respuesta.get("response") == "encuesta generada" and "encuesta" in respuesta and "opciones" in respuesta:
                         encuesta = respuesta["encuesta"]
                         opciones = respuesta["opciones"]
@@ -366,6 +370,8 @@ async def webhook(request: Request):
                 else:
                     respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, delivery_id=delivery_id)
                 print(f"Respuesta generada: {respuesta}")
+                if respuesta.get("response") == "IGNORAR_AUDIO":
+                    return {"status": "ok", "response": respuesta}
                 if "emoji" in respuesta and id_mensaje:
                     await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
                 if respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
@@ -428,7 +434,7 @@ async def webhook(request: Request):
                     }
                 else:
                     return {"status": "error", "message": "No se pudo obtener los medios del mensaje."}    
-            elif (tipo_mensaje == "ptt" or tipo_mensaje == "audio" or tipo_mensaje == "voice") and chat_id == settings.DEFAULT_GROUP.split(",")[0]:
+            elif (tipo_mensaje == "ptt" or tipo_mensaje == "audio" or tipo_mensaje == "voice"):
                 media = data.get("media", None)
                 if media is not None:
                     print("Procesando mensaje de voz...", id_mensaje)
@@ -440,6 +446,8 @@ async def webhook(request: Request):
                         await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
                     elif respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
                         await enviar_mensaje_audio(chat_id, respuesta["audio_file"], voz=respuesta.get("voz", False))
+                    elif respuesta.get("response") == "imagen generada" and "image_file" in respuesta:
+                        await enviar_mensaje_imagen(chat_id, base64_image=respuesta["image_file"], mimetype=respuesta.get("mimetype", "image/jpeg"), mensaje=f"{settings.PREFIJO_MENSAJE} {respuesta.get('caption', '')}")
                     elif respuesta.get("response") == "encuesta generada" and "encuesta" in respuesta and "opciones" in respuesta:  
                         encuesta = respuesta["encuesta"]
                         opciones = respuesta["opciones"]
