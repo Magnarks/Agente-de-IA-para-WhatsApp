@@ -9,10 +9,10 @@ import base64
 import mimetypes
 import threading
 from tavily import TavilyClient, TavilyKeylessLimitError
-from database_chatbot import consultar_mensajes, consultar_memorias, guardar_memoria, consultar_usuarios_grupo
-from generador_imagenes import espacio_esta_dormido, generar_imagen_con_reintentos
-from generador_memes import generar_meme_bytes
-from youtube_API import buscar_video, descargar_audio
+from models.database_chatbot import consultar_mensajes, consultar_memorias, guardar_memoria, consultar_usuarios_grupo
+from models.generador_imagenes import espacio_esta_dormido, generar_imagen_con_reintentos
+from models.generador_memes import generar_meme_bytes
+from models.youtube_API import buscar_video, descargar_audio
 import whisper
 import tempfile
 from datetime import datetime
@@ -24,9 +24,8 @@ import gc
 import uuid
 import re
 import traceback
-import httpx
 
-client = openai.OpenAI(base_url=settings.OPENAI_API_BASE_URL, api_key=settings.OPENAI_API_KEY, timeout=httpx.Timeout(120.0, connect=5.0), max_retries=0)
+client = openai.OpenAI(base_url=settings.OPENAI_API_BASE_URL, api_key=settings.OPENAI_API_KEY, max_retries=4)
 MODEL_NAME = settings.MODEL_NAME
 
 SYSTEM_MESSAGE = settings.SYSTEM_MESSAGE
@@ -1497,38 +1496,6 @@ def sanear_historial(historial: list, usuario: str = "?") -> list:
             msg["content"] = ""
     return historial
 
-def llamar_modelo(**kwargs):
-    """
-    Único punto por donde se llama al modelo. Centralizar esto garantiza
-    que TODAS las llamadas (loop de tools, fallback, captions, resúmenes)
-    tengan tope de tokens, y deja un solo lugar para manejar bucles.
- 
-    Un bucle de generación se detecta de dos formas:
-      - APITimeoutError: el cliente cortó a los 120 s.
-      - finish_reason == "length": llegó al tope de tokens sin terminar.
-    En ambos casos se reintenta UNA vez con penalización de repetición.
-    Si el reintento también llega al tope, se lanza un error en vez de
-    mandar al grupo un texto cortado por la mitad o repetido.
- 
-    Para una llamada que legítimamente necesite más (un resumen largo),
-    sube el tope solo ahí: llamar_modelo(..., max_tokens=4096)
-    """
-    # kwargs.setdefault("max_tokens", MAX_TOKENS_POR_DEFECTO)
- 
-    try:
-        respuesta = client.chat.completions.create(**kwargs)
-        if respuesta.choices[0].finish_reason != "length":
-            return respuesta
-        print("[WARN] El modelo llegó al tope de tokens sin terminar (posible bucle).")
-    except openai.APITimeoutError:
-        print("[WARN] Timeout del modelo (posible bucle de generación).")
- 
-    print("[WARN] Reintentando una vez con penalización de repetición...")
-    respuesta = client.chat.completions.create(**kwargs, extra_body={"repeat_penalty": 1.15, "dry_multiplier": 0.8})
-    if respuesta.choices[0].finish_reason == "length":
-        raise RuntimeError("El modelo no logró cerrar la respuesta tras el reintento (posible bucle).")
-    return respuesta
-
 async def generar_caption_imagen_IA(usuario):
     """Pide al modelo un texto corto para acompañar la imagen/meme recién generado.
     Necesario porque el modelo no puede devolver content + tool_calls a la vez,
@@ -1540,10 +1507,7 @@ async def generar_caption_imagen_IA(usuario):
             "content": "Escribe un mensaje breve y natural (sin comillas) para acompañar la imagen que acabas de generar, como si fuera el pie de foto. Responde solo con ese texto."
         }]
         mensajes_a_enviar = sanear_historial(mensajes_temp, usuario)
-        # respuesta = await asyncio.to_thread(
-        #     llamar_modelo, model=MODEL_NAME, messages=mensajes_a_enviar, tools=herramientas, tool_choice="none"
-        # )
-        respuesta = llamar_modelo(
+        respuesta = client.chat.completions.create(
             model=MODEL_NAME,
             messages=mensajes_a_enviar,
             tools=herramientas,
@@ -1772,10 +1736,6 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
                 herramientas_turno = [t for t in herramientas
                 if t["function"]["name"] != "generar_reaccion_IA"]
 
-            # respuesta = await asyncio.to_thread(
-            #     llamar_modelo, model=MODEL_NAME, messages=mensajes_a_enviar, tools=herramientas_turno
-            # )
-
             respuesta = client.chat.completions.create(
                 model=MODEL_NAME,
                 messages=mensajes_a_enviar,
@@ -1890,9 +1850,6 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
             print("[WARN] Contenido vacío, forzando respuesta de texto con tool_choice='none'")
             try:
                 mensajes_a_enviar = sanear_historial(historial_conversacion[usuario], usuario)
-                # fallback_resp = await asyncio.to_thread(
-                #     llamar_modelo, model=MODEL_NAME, messages=mensajes_a_enviar, tools=herramientas, tool_choice="none"
-                # )
                 fallback_resp = client.chat.completions.create(
                     model=MODEL_NAME,
                     messages=mensajes_a_enviar,

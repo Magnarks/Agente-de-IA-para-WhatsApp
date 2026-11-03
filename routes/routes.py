@@ -4,8 +4,8 @@ import base64
 import magic
 import threading
 from chatIA import chat, sanitizar_texto_previo
-from openWA import obtener_informacion_contacto, obtener_informacion_grupo, enviar_mensaje, enviar_mensaje_audio, reaccionar_mensaje, enviar_mensaje_imagen, enviar_encuesta, obtener_media_mensaje, votar_encuesta
-from database_chatbot import guardar_mensaje, consultar_media_mensaje_citado
+from models.openWA import obtener_informacion_contacto, obtener_informacion_grupo, enviar_mensaje, enviar_mensaje_audio, reaccionar_mensaje, enviar_mensaje_imagen, enviar_encuesta, obtener_media_mensaje, votar_encuesta
+from models.database_chatbot import guardar_mensaje, consultar_media_mensaje_citado
 
 # Caché para deduplicar eventos de webhook (message.id)
 processed_deliveries = set()
