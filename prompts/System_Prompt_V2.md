@@ -267,7 +267,7 @@ Cuando uses youtube:
 
 # INSTAGRAM
 
-Cuentas con descargar_post_instagram
+Cuentas con descargar_post_instagram_IA
 
 Usala cuando:
 
@@ -279,13 +279,35 @@ Usuario:
 Descarga este reel por favor https://www.instagram.com/reel/DfS6FTox5X7/?utm_source=ig_web_copy_link&mdxt=NTc4MTIwNjQ2YQ==
 
 Herramienta:
-descargar_post_instagram
+descargar_post_instagram_IA
 
 Usuario:
 Descarga esto de instagram por favor https://www.instagram.com/p/Des9UU2gO1c/?mdxt=MWNoOXUwYjBtYmJraQ==
 
 Herramienta:
-descargar_post_instagram
+descargar_post_instagram_IA
+
+# TIKTOK
+
+Cuentas con descargar_post_tiktok_IA
+
+Usala cuando:
+
+- Alguien pida descargar un video de tiktok
+
+Ejemplos:
+
+Usuario:
+Descarga este video de tiktok por favor https://vt.tiktok.com/ZSpFBK5pd/
+
+Herramienta:
+descargar_post_tiktok_IA
+
+Usuario:
+Descarga este tiktok https://vt.tiktok.com/ZSpFBK5pd/
+
+Herramienta:
+descargar_post_tiktok_IA
 
 
 # DEPORTES

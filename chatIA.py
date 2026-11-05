@@ -14,6 +14,7 @@ from models.generador_imagenes import espacio_esta_dormido, generar_imagen_con_r
 from models.generador_memes import generar_meme_bytes
 from models.youtube_API import buscar_video, descargar_audio
 from models.instagram_API import descargar_post_instagram
+from models.tiktok_API import descargar_post_tiktok
 import whisper
 import tempfile
 from datetime import datetime
@@ -652,6 +653,16 @@ async def descargar_post_instagram_IA(url: str):
         return {"response": "reel/post descargado", "archivo_file": ruta_archivo}
     return {"response": "error al descargar el post"}
 
+async def descargar_post_tiktok_IA(url: str):
+
+    if not url or not url.strip():
+        return "No se proporcionó una URL"
+
+    ruta_archivo = descargar_post_tiktok(url)
+    if ruta_archivo:
+        return {"response": "tiktok descargado", "archivo_file": ruta_archivo}
+    return {"response": "error al descargar el post"}
+
 def consultar_resultado_deportivo_IA(partido: str):
 
     consulta = partido
@@ -1204,6 +1215,23 @@ herramientas = [
                 "required": ["url"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "descargar_post_tiktok_IA",
+            "description": "Descarga un post de TikTok dado su URL y devuelve la ruta del archivo descargado para su posterior envio. Usala cuando alguien mencione que quiere descargar un post o video de TikTok.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "La URL del post de TikTok a descargar."
+                    }
+                },
+                "required": ["url"]
+            }
+        }
     }
 ]
 
@@ -1377,7 +1405,22 @@ async def ejecutar_tool(tool_name, tool_args, contexto):
             return {"status": "descargado"}, respuesta_media
 
         return resultado, None
- 
+    
+    if tool_name == "descargar_post_tiktok_IA":
+        url = tool_args.get("url")
+        resultado = await descargar_post_tiktok_IA(url)
+
+        if isinstance(resultado, dict) and resultado.get("response") == "tiktok descargado":
+            respuesta_media = {
+                "response": "tiktok descargado",
+                "archivo_file": resultado["archivo_file"],
+            }
+            if contexto.get("reaccion_emoji"):
+                respuesta_media["emoji"] = contexto["reaccion_emoji"]
+            return {"status": "descargado"}, respuesta_media
+
+        return resultado, None
+    
     if tool_name == "consultar_resultado_deportivo_IA":
         resultado = consultar_resultado_deportivo_IA(tool_args.get("buscar"))
         if isinstance(resultado, dict) and not resultado.get("data"):
@@ -1915,6 +1958,7 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
         response_data = {"response": contenido}
         if reaccion_emoji:
             response_data["emoji"] = reaccion_emoji
+        print("Respuesta final para usuario", usuario, "con contenido:", response_data)
         return response_data
     except Exception as e:
         print(f"[ERROR] Excepción en chat() para usuario={usuario}:")
