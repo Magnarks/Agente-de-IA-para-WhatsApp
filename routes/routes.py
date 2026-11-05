@@ -4,8 +4,9 @@ import base64
 import magic
 import threading
 from chatIA import chat, sanitizar_texto_previo
-from models.openWA import obtener_informacion_contacto, obtener_informacion_grupo, enviar_mensaje, enviar_mensaje_audio, reaccionar_mensaje, enviar_mensaje_imagen, enviar_encuesta, obtener_media_mensaje, votar_encuesta
+from models.openWA import obtener_informacion_contacto, obtener_informacion_grupo, enviar_mensaje, enviar_mensaje_audio, reaccionar_mensaje, enviar_mensaje_imagen, enviar_encuesta, obtener_media_mensaje, votar_encuesta, enviar_mensaje_video
 from models.database_chatbot import guardar_mensaje, consultar_media_mensaje_citado
+import os
 
 # Caché para deduplicar eventos de webhook (message.id)
 processed_deliveries = set()
@@ -25,13 +26,22 @@ def is_duplicate_webhook(payload):
         processed_deliveries.add(delivery_id)
         return False
 
-def leer_archivo_como_base64(datos_binarios: bytes):
+def leer_archivo_como_base64(datos_binarios: bytes, ruta_archivo: str = None):
     """
-    Codifica bytes que a base64.
+    Codifica bytes a base64.
+    Si se proporciona ruta_archivo y existe, se lee el archivo en lugar de usar los bytes proporcionados.
+    Devuelve una tupla (base64_string, mimetype).
     """
-    base64_string = base64.b64encode(datos_binarios).decode("utf-8")
-    mimetype = magic.from_buffer(datos_binarios, mime=True)
-    return base64_string, mimetype
+    if ruta_archivo and os.path.exists(ruta_archivo):
+        with open(ruta_archivo, "rb") as f:
+            datos_binarios = f.read()
+        base64_string = base64.b64encode(datos_binarios).decode("utf-8")
+        mimetype = magic.from_buffer(datos_binarios, mime=True)
+        return base64_string, mimetype
+    else:
+        base64_string = base64.b64encode(datos_binarios).decode("utf-8")
+        mimetype = magic.from_buffer(datos_binarios, mime=True)
+        return base64_string, mimetype
 
 @router.post("/webhook")
 async def webhook(request: Request):
@@ -123,6 +133,14 @@ async def webhook(request: Request):
                     await enviar_mensaje_imagen(chat_id, base64_image=respuesta["image_file"], mimetype=respuesta.get("mimetype", "image/jpeg"), mensaje=f"{settings.PREFIJO_MENSAJE} {respuesta.get("caption", "")}")
                 elif respuesta.get("response") == "meme generado" and "meme_file" in respuesta:
                     await enviar_mensaje_imagen(chat_id, base64_image=respuesta["meme_file"], mensaje=f"{settings.PREFIJO_MENSAJE} {respuesta.get("caption", "")}")
+                elif respuesta.get("response") == "reel/post descargado" and "archivo_file" in respuesta:
+                    extension_archivo = os.path.splitext(respuesta['archivo_file'])[1]
+                    if extension_archivo.lower() in (".jpg", ".jpeg", ".png", ".gif"):
+                        archivo_base64, mimetype_detectado = leer_archivo_como_base64(None, respuesta['archivo_file'])
+                        await enviar_mensaje_imagen(chat_id, base64_image=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido que pediste")
+                    else:
+                        archivo_base64, mimetype_detectado = leer_archivo_como_base64(None, respuesta['archivo_file'])
+                        await enviar_mensaje_video(chat_id, base64_video=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido que pediste")
                 elif respuesta.get("response") == "encuesta generada" and "encuesta" in respuesta and "opciones" in respuesta:
                     encuesta = respuesta["encuesta"]
                     opciones = respuesta["opciones"]
@@ -382,6 +400,14 @@ async def webhook(request: Request):
                     await enviar_mensaje_imagen(chat_id, base64_image=respuesta["image_file"], mimetype=respuesta.get("mimetype", "image/jpeg"), mensaje=f"{settings.PREFIJO_MENSAJE} {respuesta.get('caption', '')}")
                 elif respuesta.get("response") == "meme generado" and "meme_file" in respuesta:
                     await enviar_mensaje_imagen(chat_id, base64_image=respuesta["meme_file"], mensaje=f"{settings.PREFIJO_MENSAJE} {respuesta.get('caption', '')}")
+                elif respuesta.get("response") == "reel/post descargado" and "archivo_file" in respuesta:
+                    extension_archivo = os.path.splitext(respuesta['archivo_file'])[1]
+                    if extension_archivo.lower() in (".jpg", ".jpeg", ".png", ".gif"):
+                        archivo_base64, mimetype_detectado = leer_archivo_como_base64(None, respuesta['archivo_file'])
+                        await enviar_mensaje_imagen(chat_id, base64_image=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Se ha descargado el reel/post")
+                    else:
+                        archivo_base64, mimetype_detectado = leer_archivo_como_base64(None, respuesta['archivo_file'])
+                        await enviar_mensaje_video(chat_id, base64_video=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Se ha descargado el reel/post")
                 elif respuesta.get("response") == "encuesta generada" and "encuesta" in respuesta and "opciones" in respuesta:
                     encuesta = respuesta["encuesta"]
                     opciones = respuesta["opciones"]

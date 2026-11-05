@@ -3,8 +3,9 @@ from pytubefix.cli import on_progress
 import os
 import asyncio
 
-ruta_actual = os.path.dirname(os.path.abspath(__file__))
-carpeta_videos = os.path.join(ruta_actual, "videos")
+ruta_proyecto = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+carpeta_audios = os.path.join(ruta_proyecto, "audios")
+carpeta_videos = os.path.join(ruta_proyecto, "videos")
 
 def buscar_video(query):
     results = Search(query)
@@ -28,9 +29,9 @@ def _descargar_audio_sync(url: str) -> str:
     print(yt.title)
  
     ys = yt.streams.get_audio_only()
-    ys.download(output_path=carpeta_videos)
-    print(f'Audio descargado en la carpeta: {carpeta_videos}')
-    return os.path.join(carpeta_videos, ys.default_filename)
+    ys.download(output_path=carpeta_audios)
+    print(f'Audio descargado en la carpeta: {carpeta_audios}')
+    return os.path.join(carpeta_audios, ys.default_filename)
 
 async def descargar_video(url):
     yt = YouTube(url, on_progress_callback=on_progress)

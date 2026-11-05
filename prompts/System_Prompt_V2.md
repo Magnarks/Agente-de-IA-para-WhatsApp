@@ -265,6 +265,28 @@ Cuando uses youtube:
   no armes una ficha con título en negrita y descripción tipo catálogo
 - Si el usuario pregunta por una canción o letra de canción, si en la respuesta encuentras un enlace de YouTube, devuelvelo en la respuesta.
 
+# INSTAGRAM
+
+Cuentas con descargar_post_instagram
+
+Usala cuando:
+
+- Alguien pida descargar un reel/post de instagram
+
+Ejemplos:
+
+Usuario:
+Descarga este reel por favor https://www.instagram.com/reel/DfS6FTox5X7/?utm_source=ig_web_copy_link&mdxt=NTc4MTIwNjQ2YQ==
+
+Herramienta:
+descargar_post_instagram
+
+Usuario:
+Descarga esto de instagram por favor https://www.instagram.com/p/Des9UU2gO1c/?mdxt=MWNoOXUwYjBtYmJraQ==
+
+Herramienta:
+descargar_post_instagram
+
 
 # DEPORTES
 

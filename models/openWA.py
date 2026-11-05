@@ -3,7 +3,7 @@ import json
 from config import settings
 import base64
 import re
-from database_chatbot import consultar_usuarios_grupo
+from models.database_chatbot import consultar_usuarios_grupo
 
 PATRON_MENCION = re.compile(r'@(\d{8,15})\b')
 
@@ -437,6 +437,61 @@ async def enviar_mensaje_imagen(contact_id, url_image=None, base64_image=None, m
             return True
         else:
             print("Error al enviar el mensaje de imagen.", response.status_code, response.text)
+            return False
+    except requests.exceptions.Timeout:
+        print("Error: La solicitud ha excedido el tiempo de espera.")
+    except requests.exceptions.RequestException as e:
+        print(f"Error en la solicitud: {e}")
+        return False
+
+async def enviar_mensaje_video(contact_id, url_video=None, base64_video=None, mimetype="video/mp4", mensaje=""):
+
+    print(f"Preparando para enviar el mensaje de video al contacto: {contact_id}")
+
+    # with open(image_file_path, "rb") as archivo_imagen:
+    #     datos_binarios = archivo_imagen.read()
+        
+    #     # Convierte a Base64
+    #     imagen_base64 = base64.b64encode(datos_binarios)
+        
+    #     # Convierte el resultado de bytes a string (opcional)
+    #     imagen_string = imagen_base64.decode('utf-8')
+
+    api_url = f"{settings.OPENWA_BASE_URL}/api/sessions/{settings.OPENWA_SESSION_ID}/messages/send-video"
+    headers = {
+        "Accept": "*/*",
+        "Authorization": f"Bearer {settings.OPENWA_API_TOKEN}",
+    }
+    if base64_video is not None:
+        payload = {
+            "chatId": contact_id,
+            "base64": base64_video,
+            "mimetype": mimetype,
+            "caption": mensaje
+        }
+    elif url_video is not None:
+        payload = {
+            "chatId": contact_id,
+            "url": url_video,
+            "caption": mensaje
+        }
+    else:
+        print("Error: No se proporcionó ningún video.")
+        return False
+    # payload = {
+    #     "chatId": contact_id,
+    #     "image": {
+    #         "url": f"http://127.0.0.1:8000/images/respuesta_imagen_{image_file_path.split('_')[-1]}"
+    #     },
+    #     "ptt": True
+    # }
+    try:
+        response = requests.post(api_url, headers=headers, json=payload, timeout=30)
+        if response.status_code == 200 or response.status_code == 201:
+            print("Mensaje de video enviado exitosamente.")
+            return True
+        else:
+            print("Error al enviar el mensaje de video.", response.status_code, response.text)
             return False
     except requests.exceptions.Timeout:
         print("Error: La solicitud ha excedido el tiempo de espera.")

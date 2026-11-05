@@ -6,9 +6,9 @@ import base64
 import os
 import random
 
-ruta_actual = os.path.dirname(os.path.abspath(__file__))
+ruta_proyecto = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-carpeta_imagenes = os.path.join(ruta_actual, "imagenes")
+carpeta_imagenes = os.path.join(ruta_proyecto, "imagenes")
  
 def _espacio_esta_dormido_sync(space_id: str, hf_token: str) -> bool:
     try:

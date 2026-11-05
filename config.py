@@ -34,6 +34,20 @@ else:
         except Exception as e:
             print('Error al eliminar %s. Razón: %s' % (ruta_archivo, e))
 
+carpeta_videos = os.path.join(ruta_actual, "videos")
+if not os.path.exists(carpeta_videos):
+    os.makedirs(carpeta_videos)
+else:
+    for archivo in os.listdir(carpeta_videos):
+        ruta_archivo = os.path.join(carpeta_videos, archivo)
+        try:
+            if os.path.isfile(ruta_archivo) or os.path.islink(ruta_archivo):
+                os.unlink(ruta_archivo)
+            elif os.path.isdir(ruta_archivo):
+                shutil.rmtree(ruta_archivo)
+        except Exception as e:
+            print('Error al eliminar %s. Razón: %s' % (ruta_archivo, e))
+
 carpeta_prompts = os.path.join(ruta_actual, "prompts")
 archivo_prompts = os.path.join(carpeta_prompts, "System_Prompt_V2.md")
 
@@ -54,6 +68,7 @@ class Settings:
         self.DEFAULT_MENTIONS_GROUP: str = os.getenv("DEFAULT_MENTIONS_GROUP", "00000000000000@lid,00000000000000@lid,00000000000000@lid,00000000000000@lid")
         self.RUTA_AUDIOS: str = carpeta_audios
         self.RUTA_IMAGENES: str = carpeta_imagenes
+        self.RUTA_VIDEOS: str = carpeta_videos
         self.TAVILY_API_KEY: str = os.getenv("TAVILY_API_KEY", "tvly-xxxxx")
         self.FOOTBALLDATA_KEY: str = os.getenv("FOOTBALLDATA_KEY", "xxxxxxxxx")
         self.API_FOOTBALL_KEY: str = os.getenv("API_FOOTBALL_KEY", "API_FOOTBALL_KEY")
@@ -67,5 +82,6 @@ class Settings:
         self.HF_API_TOKEN: str = os.getenv("HF_API_TOKEN", "xxx")
         self.PREFIJO_MENSAJE: str = os.getenv("PREFIJO_MENSAJE", "🔷 Gemma: ")
         self.LID_BOT: str = os.getenv("LID_BOT", "@xxxxxx")
+        self.INSTAGRAM_SESSION: str = os.getenv("INSTAGRAM_SESSION", "gemma_ow")
 
 settings = Settings()

@@ -2,8 +2,8 @@ import os
 import MemePy
 # import base64
 
-ruta_actual = os.path.dirname(os.path.abspath(__file__))
-carpeta_imagenes = os.path.join(ruta_actual, "imagenes")
+ruta_proyecto = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+carpeta_imagenes = os.path.join(ruta_proyecto, "imagenes")
 
 def generar_meme_guardado(plantilla, texto):
     meme = MemePy.MemeGenerator.save_meme_to_disk(plantilla, carpeta_imagenes, texto)

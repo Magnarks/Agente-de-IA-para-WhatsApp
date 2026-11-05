@@ -13,6 +13,7 @@ from models.database_chatbot import consultar_mensajes, consultar_memorias, guar
 from models.generador_imagenes import espacio_esta_dormido, generar_imagen_con_reintentos
 from models.generador_memes import generar_meme_bytes
 from models.youtube_API import buscar_video, descargar_audio
+from models.instagram_API import descargar_post_instagram
 import whisper
 import tempfile
 from datetime import datetime
@@ -58,7 +59,7 @@ async def generar_reaccion_IA(emoji: str):
     return single_emoji
 
 async def pedir_imagen_IA(peticion: str, chat_id: str, base64_img: str = None, mimetype_img: str = None):
-    from openWA import enviar_mensaje  # import local para evitar import circular
+    from models.openWA import enviar_mensaje  # import local para evitar import circular
  
     if await espacio_esta_dormido(SPACE_ID_IMAGENES, hf_token=settings.HF_API_TOKEN):
         await enviar_mensaje(
@@ -641,6 +642,16 @@ async def descargar_audio_yt_IA(url: str, chat_id: str) -> None:
     print(f"Audio descargado y convertido a OGG: {ruta_ogg}")
     return {"response": "audio generado", "audio_file": ruta_ogg, "voz": False}
 
+async def descargar_post_instagram_IA(url: str):
+
+    if not url or not url.strip():
+        return "No se proporcionó una URL"
+
+    ruta_archivo = descargar_post_instagram(url)
+    if ruta_archivo:
+        return {"response": "reel/post descargado", "archivo_file": ruta_archivo}
+    return {"response": "error al descargar el post"}
+
 def consultar_resultado_deportivo_IA(partido: str):
 
     consulta = partido
@@ -1176,6 +1187,23 @@ herramientas = [
                 "required": ["opciones_encuesta"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "descargar_post_instagram_IA",
+            "description": "Descarga un post de Instagram dado su URL y devuelve la ruta del archivo descargado para su posterior envio. Usala cuando alguien mencione que quiere descargar un post o reel de Instagram.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "La URL del post de Instagram a descargar."
+                    }
+                },
+                "required": ["url"]
+            }
+        }
     }
 ]
 
@@ -1261,7 +1289,7 @@ def traducir_menciones_a_nombre(texto: str, miembros):
     return PATRON_MENCION_CRUDA.sub(_reemplazar, texto)
 
 
-def leer_imagen_como_base64(ruta_archivo: str):
+def leer_archivo_como_base64(ruta_archivo: str):
     """
     Lee un archivo de imagen local y devuelve (base64_string, mimetype).
     mimetype se detecta por la extensión del archivo (ej. .png -> image/png)
@@ -1334,6 +1362,21 @@ async def ejecutar_tool(tool_name, tool_args, contexto):
         url = tool_args.get("url")
         resultado = await descargar_audio_yt_IA(url, chat_id)
         return resultado, None
+
+    if tool_name == "descargar_post_instagram_IA":
+        url = tool_args.get("url")
+        resultado = await descargar_post_instagram_IA(url)
+
+        if isinstance(resultado, dict) and resultado.get("response") == "reel/post descargado":
+            respuesta_media = {
+                "response": "reel/post descargado",
+                "archivo_file": resultado["archivo_file"],
+            }
+            if contexto.get("reaccion_emoji"):
+                respuesta_media["emoji"] = contexto["reaccion_emoji"]
+            return {"status": "descargado"}, respuesta_media
+
+        return resultado, None
  
     if tool_name == "consultar_resultado_deportivo_IA":
         resultado = consultar_resultado_deportivo_IA(tool_args.get("buscar"))
@@ -1390,7 +1433,7 @@ async def ejecutar_tool(tool_name, tool_args, contexto):
 
             print("Ruta de imagen:", ruta_local)
 
-            imagen_base64, mimetype_detectado = leer_imagen_como_base64(ruta_local)
+            imagen_base64, mimetype_detectado = leer_archivo_como_base64(ruta_local)
             response_data = {
                 "response": "imagen generada",
                 "image_file": imagen_base64,
@@ -1609,7 +1652,9 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
         tipo_b64 = tipo_b64_raw.split(";")[0].strip()
         if tipo_b64 == "image/jpeg" or tipo_b64 == "image/png" or tipo_b64 == "image/gif" or tipo_b64 == "image/webp":
             image_base64 = b64.get("data")
-            historial_conversacion[usuario].append({"role": "user", "content": [{"type": "text", "text": mensaje}, {"type": "image_url", "image_url": {"url": f"data:{tipo_b64};base64,{image_base64}"}}]})
+            miembros = consultar_usuarios_grupo(chat_id)
+            mensaje_traducido = traducir_menciones_a_nombre(mensaje, miembros)
+            historial_conversacion[usuario].append({"role": "user", "content": [{"type": "text", "text": mensaje_traducido}, {"type": "image_url", "image_url": {"url": f"data:{tipo_b64};base64,{image_base64}"}}]})
             idx_media_pesada = len(historial_conversacion[usuario]) - 1
             tipo_media_pesada = "imagen"
             imagen_referencia_base64 = image_base64
@@ -1693,10 +1738,12 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
             })
         elif tipo_b64 == "video/mp4":
             video_base64 = b64.get("data")
+            miembros = consultar_usuarios_grupo(chat_id)
+            mensaje_traducido = traducir_menciones_a_nombre(mensaje, miembros)
             historial_conversacion[usuario].append({
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": mensaje},
+                    {"type": "text", "text": mensaje_traducido},
                     {"type": "input_video", "input_video": {"data": video_base64, "format": "mp4"}}
                 ]
             })
