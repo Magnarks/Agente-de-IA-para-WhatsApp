@@ -11,7 +11,7 @@ loader = instaloader.Instaloader(dirname_pattern=carpeta_videos)
 
 loader.load_session_from_file(settings.INSTAGRAM_SESSION)
 
-url = "https://www.instagram.com/reel/DfN13lmifPW/?utm_source=ig_web_copy_link&psln=NTc4MTIwNjQ2YQ=="
+# url = "https://www.instagram.com/reel/DfN13lmifPW/?utm_source=ig_web_copy_link&psln=NTc4MTIwNjQ2YQ=="
 
 def descargar_post_instagram(url):
     try:
@@ -50,7 +50,7 @@ def descargar_post_instagram(url):
         print(f"Error al descargar: {e}")
         return None
 
-if __name__ == "__main__":
-    ruta_archivo = descargar_post_instagram(url)
-    if ruta_archivo:
-        print(f"Ruta del archivo: {ruta_archivo}")
+# if __name__ == "__main__":
+#     ruta_archivo = descargar_post_instagram(url)
+#     if ruta_archivo:
+#         print(f"Ruta del archivo: {ruta_archivo}")

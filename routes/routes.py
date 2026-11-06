@@ -138,15 +138,15 @@ async def webhook(request: Request):
                     extension_archivo = os.path.splitext(respuesta['archivo_file'])[1]
                     if extension_archivo.lower() in (".jpg", ".jpeg", ".png", ".gif"):
                         archivo_base64, mimetype_detectado = leer_archivo_como_base64(None, respuesta['archivo_file'])
-                        await enviar_mensaje_imagen(chat_id, base64_image=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido que pediste")
+                        await enviar_mensaje_imagen(chat_id, base64_image=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido de Instagram que pediste")
                     else:
                         archivo_base64, mimetype_detectado = leer_archivo_como_base64(None, respuesta['archivo_file'])
-                        await enviar_mensaje_video(chat_id, base64_video=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido que pediste")
+                        await enviar_mensaje_video(chat_id, base64_video=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido de Instagram que pediste")
                 elif respuesta.get("response") == "tiktok descargado" and "archivo_file" in respuesta:
                     extension_archivo = os.path.splitext(respuesta['archivo_file'])[1]
                     if extension_archivo.lower() in (".jpg", ".jpeg", ".png", ".gif"):
                         archivo_base64, mimetype_detectado = leer_archivo_como_base64(None, respuesta['archivo_file'])
-                        await enviar_mensaje_imagen(chat_id, base64_image=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido que pediste")
+                        await enviar_mensaje_imagen(chat_id, base64_image=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido de TikTok que pediste")
                     else:
                         subprocess.run([
                             "ffmpeg",
@@ -159,7 +159,7 @@ async def webhook(request: Request):
                             os.path.splitext(respuesta['archivo_file'])[0] + "_converted.mp4"
                         ], check=True, capture_output=True)
                         archivo_base64, mimetype_detectado = leer_archivo_como_base64(None, os.path.splitext(respuesta['archivo_file'])[0] + "_converted.mp4")
-                        await enviar_mensaje_video(chat_id, base64_video=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido que pediste")
+                        await enviar_mensaje_video(chat_id, base64_video=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido de TikTok que pediste")
                 elif respuesta.get("response") == "encuesta generada" and "encuesta" in respuesta and "opciones" in respuesta:
                     encuesta = respuesta["encuesta"]
                     opciones = respuesta["opciones"]
@@ -423,15 +423,15 @@ async def webhook(request: Request):
                     extension_archivo = os.path.splitext(respuesta['archivo_file'])[1]
                     if extension_archivo.lower() in (".jpg", ".jpeg", ".png", ".gif"):
                         archivo_base64, mimetype_detectado = leer_archivo_como_base64(None, respuesta['archivo_file'])
-                        await enviar_mensaje_imagen(chat_id, base64_image=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido que pediste")
+                        await enviar_mensaje_imagen(chat_id, base64_image=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido de Instagram que pediste")
                     else:
                         archivo_base64, mimetype_detectado = leer_archivo_como_base64(None, respuesta['archivo_file'])
-                        await enviar_mensaje_video(chat_id, base64_video=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido que pediste")
+                        await enviar_mensaje_video(chat_id, base64_video=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido de Instagram que pediste")
                 elif respuesta.get("response") == "tiktok descargado" and "archivo_file" in respuesta:
                     extension_archivo = os.path.splitext(respuesta['archivo_file'])[1]
                     if extension_archivo.lower() in (".jpg", ".jpeg", ".png", ".gif"):
                         archivo_base64, mimetype_detectado = leer_archivo_como_base64(None, respuesta['archivo_file'])
-                        await enviar_mensaje_imagen(chat_id, base64_image=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido que pediste")
+                        await enviar_mensaje_imagen(chat_id, base64_image=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido de TikTok que pediste")
                     else:
                         subprocess.run([
                             "ffmpeg",
@@ -444,7 +444,7 @@ async def webhook(request: Request):
                             os.path.splitext(respuesta['archivo_file'])[0] + "_converted.mp4"
                         ], check=True, capture_output=True)
                         archivo_base64, mimetype_detectado = leer_archivo_como_base64(None, os.path.splitext(respuesta['archivo_file'])[0] + "_converted.mp4")
-                        await enviar_mensaje_video(chat_id, base64_video=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido que pediste")
+                        await enviar_mensaje_video(chat_id, base64_video=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido de TikTok que pediste")
                 elif respuesta.get("response") == "encuesta generada" and "encuesta" in respuesta and "opciones" in respuesta:
                     encuesta = respuesta["encuesta"]
                     opciones = respuesta["opciones"]
