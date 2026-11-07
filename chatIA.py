@@ -1688,7 +1688,7 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
             mensaje = mensaje[:4000] + "... [contenido truncado]"
         miembros = consultar_usuarios_grupo(chat_id)
         mensaje_traducido = traducir_menciones_a_nombre(mensaje, miembros)
-        historial_conversacion[usuario].append({"role": "user", "content": mensaje_traducido})
+        historial_conversacion[usuario].append({"role": "user", "content": f"[Remitente: {usuario}]\n{mensaje_traducido}"})
         # historial_conversacion[usuario].append({"role": "user", "content": mensaje})
     else:
         tipo_b64_raw = b64.get('mimetype', None) or ""
@@ -1697,7 +1697,7 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
             image_base64 = b64.get("data")
             miembros = consultar_usuarios_grupo(chat_id)
             mensaje_traducido = traducir_menciones_a_nombre(mensaje, miembros)
-            historial_conversacion[usuario].append({"role": "user", "content": [{"type": "text", "text": mensaje_traducido}, {"type": "image_url", "image_url": {"url": f"data:{tipo_b64};base64,{image_base64}"}}]})
+            historial_conversacion[usuario].append({"role": "user", "content": [{"type": "text", "text": f"[Remitente: {usuario}]\n{mensaje_traducido}"}, {"type": "image_url", "image_url": {"url": f"data:{tipo_b64};base64,{image_base64}"}}]})
             idx_media_pesada = len(historial_conversacion[usuario]) - 1
             tipo_media_pesada = "imagen"
             imagen_referencia_base64 = image_base64
@@ -1754,7 +1754,7 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
                     "content": [
                         {
                             "type": "text",
-                            "text": transcripcion,
+                            "text": f"{usuario}: {transcripcion}",
                         },
                         {
                             "type": "input_audio",
@@ -1786,7 +1786,7 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
             historial_conversacion[usuario].append({
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": mensaje_traducido},
+                    {"type": "text", "text": f"[Remitente: {usuario}]\n{mensaje_traducido}"},
                     {"type": "input_video", "input_video": {"data": video_base64, "format": "mp4"}}
                 ]
             })
