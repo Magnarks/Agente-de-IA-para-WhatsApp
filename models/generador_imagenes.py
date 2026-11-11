@@ -67,7 +67,7 @@ def _generar_imagen_sync(space_id: str, prompt: str, hf_token: str = None, timeo
                 )
                 return client.predict(
                     prompt=prompt,
-                    size="1024x1024 (1:1)",
+                    size="2528x1696 (3:2)",
                     steps=28,
                     seed=0,
                     randomize_seed=True,
