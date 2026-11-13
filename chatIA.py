@@ -509,7 +509,7 @@ async def generar_meme_IA(plantilla: str, argumentos: list):
     meme_bytes = generar_meme_bytes(plantilla, argumentos)
     if hasattr(meme_bytes, 'getvalue'):
         meme_bytes = meme_bytes.getvalue()
-    print("Meme generado:", meme_bytes)
+    print("Meme generado:", resumir(meme_bytes))
     return meme_bytes
 
 async def enviar_encuesta_IA(encuesta: str, opciones: list, multiple: bool = False):
@@ -648,9 +648,9 @@ async def descargar_post_instagram_IA(url: str):
     if not url or not url.strip():
         return "No se proporcionó una URL"
 
-    ruta_archivo = descargar_post_instagram(url)
-    if ruta_archivo:
-        return {"response": "reel/post descargado", "archivo_file": ruta_archivo}
+    resultado = descargar_post_instagram(url)
+    if resultado:
+        return {"response": "reel/post descargado", "archivo_file": resultado["archivo_file"], "caption": resultado["caption"]}
     return {"response": "error al descargar el post"}
 
 async def descargar_post_tiktok_IA(url: str):
@@ -1399,6 +1399,7 @@ async def ejecutar_tool(tool_name, tool_args, contexto):
             respuesta_media = {
                 "response": "reel/post descargado",
                 "archivo_file": resultado["archivo_file"],
+                "caption": resultado["caption"]
             }
             if contexto.get("reaccion_emoji"):
                 respuesta_media["emoji"] = contexto["reaccion_emoji"]
@@ -1546,6 +1547,15 @@ async def ejecutar_tool(tool_name, tool_args, contexto):
         return resultado_voto, None
  
     return "Función no reconocida", None
+
+def resumir(obj, limite=2000):
+    if isinstance(obj, (str, bytes)) and len(obj) > limite:
+        return f"<{type(obj).__name__} de {len(obj)}>"
+    if isinstance(obj, dict):
+        return {k: resumir(v, limite) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [resumir(v, limite) for v in obj]
+    return obj
 
 def sanear_historial(historial: list, usuario: str = "?") -> list:
     """
@@ -1795,7 +1805,7 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
         else:
             return {"response": "No se pudo obtener el tipo de archivo."}
  
-    print(f"[DEBUG] Historial de conversación para {usuario}: {historial_conversacion[usuario]}")
+    print(f"[DEBUG] Historial de conversación para {usuario}: {resumir(historial_conversacion[usuario])}")
  
     try:
         user_input = mensaje.strip()
@@ -1937,19 +1947,23 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
         # SOBRE EL MISMO HISTORIAL (que ya incluye los resultados de las tools),
         # solo que ahora sin poder volver a llamar herramientas.
         if not contenido:
-            print("[WARN] Contenido vacío, forzando respuesta de texto con tool_choice='none'")
             try:
-                mensajes_a_enviar = sanear_historial(historial_conversacion[usuario], usuario)
                 fallback_resp = client.chat.completions.create(
                     model=MODEL_NAME,
-                    messages=mensajes_a_enviar,
-                    tools=herramientas,
-                    tool_choice="none"
+                    messages=sanear_historial(historial_conversacion[usuario], usuario) + [{
+                        "role": "user",
+                        "content": "Responde ahora al usuario en texto natural con los resultados anteriores. No llames herramientas."
+                    }],
                 )
-                contenido = fallback_resp.choices[0].message.content or ""
-                contenido, reaccion_emoji = limpiar_tool_calls_texto(contenido, reaccion_emoji)
-            except Exception as fe:
-                print(f"[WARN] Error en fallback: {fe}")
+                fmsg = fallback_resp.choices[0].message
+                print(f"[DEBUG] fallback finish_reason={fallback_resp.choices[0].finish_reason} "
+                    f"content={fmsg.content!r} reasoning={getattr(fmsg, 'reasoning_content', None)!r}")
+                contenido, reaccion_emoji = limpiar_tool_calls_texto(fmsg.content or "", reaccion_emoji)
+            except Exception:
+                print(f"[ERROR] Error en fallback:\n{traceback.format_exc()}")
+
+        if not contenido:
+            contenido = "No pude armar una respuesta en este momento, ¿me lo repites?"
 
         if tipo_media_pesada == "audio" and re.match(r"^\W*IGNORAR_AUDIO\b", contenido, re.IGNORECASE):
             return {"response": "IGNORAR_AUDIO"}
@@ -1958,15 +1972,15 @@ async def chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=None, delive
         response_data = {"response": contenido}
         if reaccion_emoji:
             response_data["emoji"] = reaccion_emoji
-        print("Respuesta final para usuario", usuario, "con contenido:", response_data)
+        print("Respuesta final para usuario", usuario, "con contenido:", resumir(response_data))
         return response_data
+    except openai.APITimeoutError:
+        print("[WARN] Timeout del modelo (posible bucle de generación).")
+        return {"error": "Timeout del modelo", "response": "No pude armar una respuesta en este momento, ¿me lo repites?"}
     except Exception as e:
         print(f"[ERROR] Excepción en chat() para usuario={usuario}:")
         print(traceback.format_exc())
-        return {"error": str(e)}
-    except openai.APITimeoutError:
-        print("[WARN] Timeout del modelo (posible bucle de generación).")
-        return {"error": "Timeout del modelo"}
+        return {"error": str(e), "response": "No pude armar una respuesta en este momento, ¿me lo repites?"}
     finally:
         # Se ejecuta SIEMPRE al salir de chat(), sin importar si fue un
         # return normal, un return anticipado desde el loop de tools, o

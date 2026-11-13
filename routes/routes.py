@@ -3,7 +3,7 @@ from config import settings
 import base64
 import magic
 import threading
-from chatIA import chat, sanitizar_texto_previo
+from chatIA import chat, sanitizar_texto_previo, resumir
 from models.openWA import obtener_informacion_contacto, obtener_informacion_grupo, enviar_mensaje, enviar_mensaje_audio, reaccionar_mensaje, enviar_mensaje_imagen, enviar_encuesta, obtener_media_mensaje, votar_encuesta, enviar_mensaje_video
 from models.database_chatbot import guardar_mensaje, consultar_media_mensaje_citado
 import os
@@ -47,7 +47,7 @@ def leer_archivo_como_base64(datos_binarios: bytes, ruta_archivo: str = None):
 @router.post("/webhook")
 async def webhook(request: Request):
     payload = await request.json()
-    print(f"Webhook recibido: {payload}")
+    print(f"Webhook recibido: {resumir(payload)}")
 
     if is_duplicate_webhook(payload):
         delivery_id = payload.get("deliveryId", None)
@@ -62,7 +62,7 @@ async def webhook(request: Request):
             print("No se recibió el campo 'data' en el webhook.")
             return {"status": "error", "message": "No se recibió el campo 'data'."}
         else:
-            print(f"Datos del webhook: {data}")
+            print(f"Datos del webhook: {resumir(data)}")
             chat_id = data.get("chatId", "desconocido")
             for grupo in settings.DEFAULT_GROUP.split(","):
                 if chat_id == grupo:
@@ -121,7 +121,7 @@ async def webhook(request: Request):
                         respuesta = await chat(mensaje + " " + f"'{body_citado}'", remitente, id_remitente_grupo, chat_id, delivery_id=delivery_id)                            
                 else:
                     respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, delivery_id=delivery_id)
-                print(f"Respuesta generada: {respuesta}")
+                print(f"Respuesta generada: {resumir(respuesta)}")
                 if respuesta.get("response") == "IGNORAR_AUDIO":
                     return {"status": "ok", "response": respuesta}
                 if "emoji" in respuesta and id_mensaje:
@@ -138,10 +138,10 @@ async def webhook(request: Request):
                     extension_archivo = os.path.splitext(respuesta['archivo_file'])[1]
                     if extension_archivo.lower() in (".jpg", ".jpeg", ".png", ".gif"):
                         archivo_base64, mimetype_detectado = leer_archivo_como_base64(None, respuesta['archivo_file'])
-                        await enviar_mensaje_imagen(chat_id, base64_image=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido de Instagram que pediste")
+                        await enviar_mensaje_imagen(chat_id, base64_image=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido de Instagram que pediste:\n'{respuesta.get('caption', '')}'")
                     else:
                         archivo_base64, mimetype_detectado = leer_archivo_como_base64(None, respuesta['archivo_file'])
-                        await enviar_mensaje_video(chat_id, base64_video=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido de Instagram que pediste")
+                        await enviar_mensaje_video(chat_id, base64_video=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido de Instagram que pediste:\n'{respuesta.get('caption', '')}'")
                 elif respuesta.get("response") == "tiktok descargado" and "archivo_file" in respuesta:
                     extension_archivo = os.path.splitext(respuesta['archivo_file'])[1]
                     if extension_archivo.lower() in (".jpg", ".jpeg", ".png", ".gif"):
@@ -169,6 +169,7 @@ async def webhook(request: Request):
                     if "error" in respuesta:
                         print(f"[WARN] Error al generar respuesta: {respuesta['error']}")
                         # decide qué hacer: no enviar nada, o enviar un mensaje genérico de error
+                        await enviar_mensaje(chat_id, respuesta.get("response", f"{settings.PREFIJO_MENSAJE} Ocurrió un error al generar la respuesta: {respuesta['error']}"), id_mensaje)
                     else:
                         await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} {respuesta['response']}", id_mensaje)
                 return {
@@ -190,9 +191,9 @@ async def webhook(request: Request):
                         else:
                             media, mimetype = leer_archivo_como_base64(media)
                             media = {"data": media, "mimetype": mimetype}
-                    print(f"Media obtenida: {media}")
+                    print(f"Media obtenida: {resumir(media)}")
                     respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=media, delivery_id=payload.get("deliveryId"))
-                    print(f"Respuesta generada: {respuesta}")
+                    print(f"Respuesta generada: {resumir(respuesta)}")
                     if "emoji" in respuesta and id_mensaje:
                         await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
                     if respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
@@ -205,6 +206,7 @@ async def webhook(request: Request):
                         if "error" in respuesta:
                             print(f"[WARN] Error al generar respuesta: {respuesta['error']}")
                             # decide qué hacer: no enviar nada, o enviar un mensaje genérico de error
+                            await enviar_mensaje(chat_id, respuesta.get("response", f"{settings.PREFIJO_MENSAJE} Ocurrió un error al generar la respuesta: {respuesta['error']}"), id_mensaje)
                         else:
                             await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} {respuesta['response']}", id_mensaje)
                     return {
@@ -219,7 +221,7 @@ async def webhook(request: Request):
                 if media is not None:
                     print("Procesando mensaje de voz...", id_mensaje)
                     respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=media, delivery_id=payload.get("deliveryId"))
-                    print(f"Respuesta generada: {respuesta}")
+                    print(f"Respuesta generada: {resumir(respuesta)}")
                     if respuesta["response"] == "IGNORAR_AUDIO" or respuesta["response"] == "No se pudo obtener el tipo de archivo.":
                         return {"status": "error", "message": "No se llamo a gemma en el mensaje o no se pudo obtener el tipo de archivo."}
                     if "emoji" in respuesta and id_mensaje:
@@ -237,6 +239,7 @@ async def webhook(request: Request):
                         if "error" in respuesta:
                             print(f"[WARN] Error al generar respuesta: {respuesta['error']}")
                             # decide qué hacer: no enviar nada, o enviar un mensaje genérico de error
+                            await enviar_mensaje(chat_id, respuesta.get("response", f"{settings.PREFIJO_MENSAJE} Ocurrió un error al generar la respuesta: {respuesta['error']}"), id_mensaje)
                         else:
                             await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} {respuesta['response']}", id_mensaje)
                 else:
@@ -256,9 +259,9 @@ async def webhook(request: Request):
                         else:
                             media, mimetype = leer_archivo_como_base64(media)
                             media = {"data": media, "mimetype": mimetype}
-                    print(f"Media obtenida: {media}")
+                    print(f"Media obtenida: {resumir(media)}")
                     respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=media, delivery_id=payload.get("deliveryId"))
-                    print(f"Respuesta generada: {respuesta}")
+                    print(f"Respuesta generada: {resumir(respuesta)}")
                     if "emoji" in respuesta and id_mensaje:
                         await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
                     if respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
@@ -269,6 +272,7 @@ async def webhook(request: Request):
                         if "error" in respuesta:
                             print(f"[WARN] Error al generar respuesta: {respuesta['error']}")
                             # decide qué hacer: no enviar nada, o enviar un mensaje genérico de error
+                            await enviar_mensaje(chat_id, respuesta.get("response", f"{settings.PREFIJO_MENSAJE} Ocurrió un error al generar la respuesta: {respuesta['error']}"), id_mensaje)
                         else:
                             await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} {respuesta['response']}", id_mensaje)
                     return {
@@ -292,9 +296,9 @@ async def webhook(request: Request):
                         else:
                             media, mimetype = leer_archivo_como_base64(media)
                             media = {"data": media, "mimetype": mimetype}
-                    print(f"Media obtenida: {media}")
+                    print(f"Media obtenida: {resumir(media)}")
                     respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=media, delivery_id=payload.get("deliveryId"))
-                    print(f"Respuesta generada: {respuesta}")
+                    print(f"Respuesta generada: {resumir(respuesta)}")
                     if "emoji" in respuesta and id_mensaje:
                         await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
                     if respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
@@ -305,6 +309,7 @@ async def webhook(request: Request):
                         if "error" in respuesta:
                             print(f"[WARN] Error al generar respuesta: {respuesta['error']}")
                             # decide qué hacer: no enviar nada, o enviar un mensaje genérico de error
+                            await enviar_mensaje(chat_id, respuesta.get("response", f"{settings.PREFIJO_MENSAJE} Ocurrió un error al generar la respuesta: {respuesta['error']}"), id_mensaje)
                         else:
                             await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} {respuesta['response']}", id_mensaje)
                     return {
@@ -337,7 +342,7 @@ async def webhook(request: Request):
             print("No se recibió el campo 'data' en el webhook.")
             return {"status": "error", "message": "No se recibió el campo 'data'."}
         else:
-            print(f"Datos del webhook: {data}")
+            print(f"Datos del webhook: {resumir(data)}")
             chat_id = data.get("chatId", "desconocido")
             for grupo in settings.DEFAULT_GROUP.split(","):
                 if chat_id == grupo:
@@ -406,7 +411,7 @@ async def webhook(request: Request):
                         respuesta = await chat(mensaje + " " + f"'{body_citado}'", remitente, id_remitente_grupo, chat_id, delivery_id=delivery_id)
                 else:
                     respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, delivery_id=delivery_id)
-                print(f"Respuesta generada: {respuesta}")
+                print(f"Respuesta generada: {resumir(respuesta)}")
                 if respuesta.get("response") == "IGNORAR_AUDIO":
                     return {"status": "ok", "response": respuesta}
                 if "emoji" in respuesta and id_mensaje:
@@ -423,10 +428,10 @@ async def webhook(request: Request):
                     extension_archivo = os.path.splitext(respuesta['archivo_file'])[1]
                     if extension_archivo.lower() in (".jpg", ".jpeg", ".png", ".gif"):
                         archivo_base64, mimetype_detectado = leer_archivo_como_base64(None, respuesta['archivo_file'])
-                        await enviar_mensaje_imagen(chat_id, base64_image=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido de Instagram que pediste")
+                        await enviar_mensaje_imagen(chat_id, base64_image=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido de Instagram que pediste:\n'{respuesta.get('caption', '')}'")
                     else:
                         archivo_base64, mimetype_detectado = leer_archivo_como_base64(None, respuesta['archivo_file'])
-                        await enviar_mensaje_video(chat_id, base64_video=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido de Instagram que pediste")
+                        await enviar_mensaje_video(chat_id, base64_video=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido de Instagram que pediste:\n'{respuesta.get('caption', '')}'")
                 elif respuesta.get("response") == "tiktok descargado" and "archivo_file" in respuesta:
                     extension_archivo = os.path.splitext(respuesta['archivo_file'])[1]
                     if extension_archivo.lower() in (".jpg", ".jpeg", ".png", ".gif"):
@@ -454,6 +459,7 @@ async def webhook(request: Request):
                     if "error" in respuesta:
                         print(f"[WARN] Error al generar respuesta: {respuesta['error']}")
                         # decide qué hacer: no enviar nada, o enviar un mensaje genérico de error
+                        await enviar_mensaje(chat_id, respuesta.get("response", f"{settings.PREFIJO_MENSAJE} Ocurrió un error al generar la respuesta: {respuesta['error']}"), id_mensaje)
                     else:
                         await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} {respuesta['response']}", id_mensaje)
                 return {
@@ -474,9 +480,9 @@ async def webhook(request: Request):
                         else:
                             media, mimetype = leer_archivo_como_base64(media)
                             media = {"data": media, "mimetype": mimetype}
-                    print(f"Media obtenida: {media}")
+                    print(f"Media obtenida: {resumir(media)}")
                     respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=media, delivery_id=payload.get("deliveryId"))
-                    print(f"Respuesta generada: {respuesta}")
+                    print(f"Respuesta generada: {resumir(respuesta)}")
                     if "emoji" in respuesta and id_mensaje:
                         await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
                     if respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
@@ -489,6 +495,7 @@ async def webhook(request: Request):
                         if "error" in respuesta:
                             print(f"[WARN] Error al generar respuesta: {respuesta['error']}")
                             # decide qué hacer: no enviar nada, o enviar un mensaje genérico de error
+                            await enviar_mensaje(chat_id, respuesta.get("response", f"{settings.PREFIJO_MENSAJE} Ocurrió un error al generar la respuesta: {respuesta['error']}"), id_mensaje)
                         else:
                             await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} {respuesta['response']}", id_mensaje)
                     return {
@@ -502,7 +509,7 @@ async def webhook(request: Request):
                 if media is not None:
                     print("Procesando mensaje de voz...", id_mensaje)
                     respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=media, delivery_id=payload.get("deliveryId"))
-                    print(f"Respuesta generada: {respuesta}")
+                    print(f"Respuesta generada: {resumir(respuesta)}")
                     if respuesta["response"] == "IGNORAR_AUDIO" or respuesta["response"] == "No se pudo obtener el tipo de archivo.":
                         return {"status": "error", "message": "No se llamo a gemma en el mensaje o no se pudo obtener el tipo de archivo."}
                     if "emoji" in respuesta and id_mensaje:
@@ -520,6 +527,7 @@ async def webhook(request: Request):
                         if "error" in respuesta:
                             print(f"[WARN] Error al generar respuesta: {respuesta['error']}")
                             # decide qué hacer: no enviar nada, o enviar un mensaje genérico de error
+                            await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} Ocurrió un error al generar la respuesta: {respuesta['error']}", id_mensaje)
                         else:
                             await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} {respuesta['response']}", id_mensaje)
                 else:
@@ -539,9 +547,9 @@ async def webhook(request: Request):
                         else:
                             media, mimetype = leer_archivo_como_base64(media)
                             media = {"data": media, "mimetype": mimetype}
-                    print(f"Media obtenida: {media}")
+                    print(f"Media obtenida: {resumir(media)}")
                     respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=media, delivery_id=payload.get("deliveryId"))
-                    print(f"Respuesta generada: {respuesta}")
+                    print(f"Respuesta generada: {resumir(respuesta)}")
                     if "emoji" in respuesta and id_mensaje:
                         await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
                     if respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
@@ -552,6 +560,7 @@ async def webhook(request: Request):
                         if "error" in respuesta:
                             print(f"[WARN] Error al generar respuesta: {respuesta['error']}")
                             # decide qué hacer: no enviar nada, o enviar un mensaje genérico de error
+                            await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} Ocurrió un error al generar la respuesta: {respuesta['error']}", id_mensaje)
                         else:
                             await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} {respuesta['response']}", id_mensaje)
                     return {
@@ -575,9 +584,9 @@ async def webhook(request: Request):
                         else:
                             media, mimetype = leer_archivo_como_base64(media)
                             media = {"data": media, "mimetype": mimetype}
-                    print(f"Media obtenida: {media}")
+                    print(f"Media obtenida: {resumir(media)}")
                     respuesta = await chat(mensaje, remitente, id_remitente_grupo, chat_id, b64=media, delivery_id=payload.get("deliveryId"))
-                    print(f"Respuesta generada: {respuesta}")
+                    print(f"Respuesta generada: {resumir(respuesta)}")
                     if "emoji" in respuesta and id_mensaje:
                         await reaccionar_mensaje(chat_id, id_mensaje, respuesta["emoji"])
                     if respuesta.get("response") == "audio generado" and "audio_file" in respuesta:
@@ -588,6 +597,7 @@ async def webhook(request: Request):
                         if "error" in respuesta:
                             print(f"[WARN] Error al generar respuesta: {respuesta['error']}")
                             # decide qué hacer: no enviar nada, o enviar un mensaje genérico de error
+                            await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} Ocurrió un error al generar la respuesta: {respuesta['error']}", id_mensaje)
                         else:
                             await enviar_mensaje(chat_id, f"{settings.PREFIJO_MENSAJE} {respuesta['response']}", id_mensaje)
                     return {

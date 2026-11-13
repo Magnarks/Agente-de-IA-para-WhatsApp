@@ -1,4 +1,5 @@
 import pymongo
+from pymongo.errors import DocumentTooLarge
 from config import settings
 import time
 from datetime import datetime, timedelta
@@ -23,11 +24,28 @@ def consultar_memorias(remitente: str, id_remitente: str):
     return [{"memoria": m["memoria"], "fecha": str(m["fecha"])} for m in memorias]
 
 def guardar_mensaje(id_chat, documento):
-    insercion = db["historial_mensajes_" + id_chat].insert_one(documento)
-    if insercion.inserted_id:
-        return {"estado_guardado": True, "data": insercion.inserted_id}
-    else:
-        return {"estado_guardado": False, "data": "Error al guardar"}
+    try:
+        insercion = db["historial_mensajes_" + id_chat].insert_one(documento)
+        if insercion.inserted_id:
+            return {"estado_guardado": True, "data": insercion.inserted_id}
+        else:
+            return {"estado_guardado": False, "data": "Error al guardar"}
+    except DocumentTooLarge:
+        if "media" in documento:
+            print(f"[WARN] El documento contiene media y es demasiado grande.")
+            documento["media"] = None
+            try:
+                insercion = db["historial_mensajes_" + id_chat].insert_one(documento)
+                if insercion.inserted_id:
+                    return {"estado_guardado": True, "data": insercion.inserted_id}
+                else:
+                    return {"estado_guardado": False, "data": "Error al guardar"}
+            except DocumentTooLarge:
+                print(f"[WARN] Documento sigue siendo demasiado grande incluso sin media.")
+                return {"estado_guardado": False, "data": "Documento demasiado grande"}
+        else:
+            print(f"[WARN] Documento demasiado grande y no contiene media.")
+            return {"estado_guardado": False, "data": "Documento demasiado grande"}
 
 def consultar_media_mensaje_citado(id_chat, id_mensaje):
     documento = db["historial_mensajes_" + id_chat].find_one({"id": id_mensaje})

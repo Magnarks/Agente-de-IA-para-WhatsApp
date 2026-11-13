@@ -45,7 +45,10 @@ def descargar_post_instagram(url):
             raise FileNotFoundError(f"No se encontró el archivo descargado: {ruta_archivo}")
 
         print("¡Publicación descargada con éxito!")
-        return ruta_archivo
+        return {
+            "archivo_file": ruta_archivo,
+            "caption": post.caption or "",
+        }
     except Exception as e:
         print(f"Error al descargar: {e}")
         return None
