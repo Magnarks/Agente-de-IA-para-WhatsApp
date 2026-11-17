@@ -9,10 +9,11 @@ import base64
 import mimetypes
 import threading
 from tavily import TavilyClient, TavilyKeylessLimitError
+from models.openWA import enviar_mensaje, enviar_mensaje_audio, enviar_mensaje_video
 from models.database_chatbot import consultar_mensajes, consultar_memorias, guardar_memoria, consultar_usuarios_grupo
 from models.generador_imagenes import espacio_esta_dormido, generar_imagen_con_reintentos
 from models.generador_memes import generar_meme_bytes
-from models.youtube_API import buscar_video, descargar_audio
+from models.youtube_API import buscar_video, descargar_audio, descargar_video
 from models.instagram_API import descargar_post_instagram
 from models.tiktok_API import descargar_post_tiktok
 import whisper
@@ -611,13 +612,8 @@ async def buscar_video_yt_IA(buscar: str, chat_id: str):
     if not buscar or not buscar.strip():
         return "No se proporcionó una consulta"
     
-    video = buscar_video(buscar)
-    # await descargar_audio_yt_IA(video.watch_url, chat_id)
-    return {
-        "titulo": video.title,
-        "url": video.watch_url,
-        "duracion": str(video.length // 60) + "min"
-    } 
+    videos = buscar_video(buscar)
+    return {"videos": videos}
 
 def _convertir_a_ogg_sync(ruta_entrada: str) -> str:
     ruta_salida = os.path.splitext(ruta_entrada)[0] + ".ogg"
@@ -633,7 +629,7 @@ def _convertir_a_ogg_sync(ruta_entrada: str) -> str:
     ], check=True, capture_output=True)
     return ruta_salida
 
-async def descargar_audio_yt_IA(url: str, chat_id: str) -> None:
+async def descargar_audio_yt_IA(url: str, chat_id: str):
     print(f"Descargando audio de la URL: {url}")
     if not url or not url.strip():
         return "No se proporcionó una URL"
@@ -641,7 +637,32 @@ async def descargar_audio_yt_IA(url: str, chat_id: str) -> None:
     ruta_descarga = await descargar_audio(url)
     ruta_ogg = await asyncio.to_thread(_convertir_a_ogg_sync, ruta_descarga)
     print(f"Audio descargado y convertido a OGG: {ruta_ogg}")
-    return {"response": "audio generado", "audio_file": ruta_ogg, "voz": False}
+
+    mensaje_enlace = (
+        "🎵 Aquí tienes el video de YouTube; enseguida te envío el audio:\n"
+        f"{url}"
+    )
+    if not await enviar_mensaje(chat_id, mensaje_enlace):
+        raise RuntimeError("No se pudo enviar el enlace del video de YouTube.")
+    if not await enviar_mensaje_audio(chat_id, ruta_ogg, voz=False):
+        raise RuntimeError("No se pudo enviar el audio de YouTube.")
+    return {"status": "enviado", "enlace": True, "audio": True}
+
+async def descargar_video_yt_IA(url: str, chat_id: str):
+    print(f"Descargando video de la URL: {url}")
+    if not url or not url.strip():
+        return "No se proporcionó una URL"
+
+    ruta_descarga = await descargar_video(url)
+    print(f"Video descargado: {ruta_descarga}")
+
+    mensaje_enlace = (
+        "🍿⏯️ Aquí tienes el video de YouTube:\n"
+        f"{url}"
+    )
+    if not await enviar_mensaje_video(chat_id, url_video=ruta_descarga, mensaje=mensaje_enlace):
+        raise RuntimeError("No se pudo enviar el video de YouTube.")
+    return {"status": "enviado", "enlace": True, "video": True}
 
 async def descargar_post_instagram_IA(url: str):
 
@@ -935,10 +956,19 @@ herramientas = [
         "function": {
             "name": "buscar_video_yt_IA",
             "description": (
-                "Busca un video en YouTube y devuelve su título, URL y "
-                "duración. Úsala para CUALQUIER contenido de YouTube: "
-                "canciones, videos, tutoriales, clips, etc. Siempre "
-                "comparte el enlace del video en tu respuesta al usuario. "
+                "Busca en YouTube y devuelve una lista de videos de la "
+                "primera página, con título, URL y duración en segundos y "
+                "formato legible. Úsala para CUALQUIER contenido de "
+                "YouTube: canciones, videos, tutoriales, clips, etc. "
+                "Compara título y duración para elegir el resultado que "
+                "mejor coincida; para una canción individual, prefiere "
+                "una versión completa de duración normal y evita mezclas "
+                "o conciertos largos si hay una alternativa adecuada. "
+                "No elijas siempre el primer resultado. Si solo buscas el "
+                "video, comparte el enlace en tu respuesta. Si también "
+                "llamas a descargar_audio_yt_IA, esa herramienta envía "
+                "el enlace en un mensaje contextual separado; no lo "
+                "repitas en tu respuesta de texto. "
                 "Si el usuario pide un video o canción nueva, haz una "
                 "nueva búsqueda — no asumas que sigue siendo la misma de "
                 "antes."
@@ -961,9 +991,11 @@ herramientas = [
             "name": "descargar_audio_yt_IA",
             "description": (
                 "Descarga el AUDIO de un video de YouTube y lo envía "
-                "directamente al usuario como nota de audio (no solo el "
-                "enlace). Requiere haber llamado antes a buscar_video_yt_IA "
-                "en este mismo turno para obtener la URL.\n\n"
+                "al usuario en dos mensajes separados: primero un texto "
+                "contextual con el enlace y después el audio. Requiere "
+                "haber llamado antes a buscar_video_yt_IA en este mismo "
+                "turno; elige una URL exacta de la lista de resultados. "
+                "No repitas el enlace en la respuesta de texto posterior.\n\n"
                 "Úsala SOLO cuando el usuario pida explícitamente ESCUCHAR "
                 "o RECIBIR el audio/canción — frases como 'pásame la "
                 "canción', 'mándame el audio', 'descárgala', 'quiero "
@@ -978,7 +1010,33 @@ herramientas = [
                 "properties": {
                     "url": {
                         "type": "string",
-                        "description": "La URL del video de YouTube (obtenida de buscar_video_yt_IA) del que se desea extraer el audio."
+                        "description": "La URL exacta del video elegido de la lista devuelta por buscar_video_yt_IA."
+                    }
+                },
+                "required": ["url"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "descargar_video_yt_IA",
+            "description": (
+                "Descarga el VIDEO de un video de YouTube y lo envía "
+                "al usuario. Requiere haber llamado antes a buscar_video_yt_IA "
+                "en este mismo turno; elige una URL exacta de la lista de resultados. "
+                "Úsala SOLO cuando el usuario pida explícitamente VER o RECIBIR el video — "
+                "frases como 'quiero ver el video', 'mándame el video', 'descárgalo', 'ponlo'.\n\n"
+                "NO la uses si el usuario solo pregunta por un audio/canción, quiere información/el "
+                "enlace o resultados de búsqueda — en esos casos el enlace de buscar_video_yt_IA ya "
+                "es suficiente, no descargues nada."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "La URL exacta del video elegido de la lista devuelta por buscar_video_yt_IA."
                     }
                 },
                 "required": ["url"]
@@ -1293,7 +1351,8 @@ def construir_mapa_lid_a_nombre(miembros):
         nombre = (m.get("name") or m.get("pushName") or "").strip()
         if not nombre:
             continue
-        mapa[lid_raw] = nombre.split()[0]  # primer nombre, suena más natural
+        # mapa[lid_raw] = nombre.split()[0]  # primer nombre, suena más natural
+        mapa[lid_raw] = nombre  # usar el nombre completo
     return mapa
  
  
@@ -1391,6 +1450,11 @@ async def ejecutar_tool(tool_name, tool_args, contexto):
         resultado = await descargar_audio_yt_IA(url, chat_id)
         return resultado, None
 
+    if tool_name == "descargar_video_yt_IA":
+        url = tool_args.get("url")
+        resultado = await descargar_video_yt_IA(url, chat_id)
+        return resultado, None
+    
     if tool_name == "descargar_post_instagram_IA":
         url = tool_args.get("url")
         resultado = await descargar_post_instagram_IA(url)

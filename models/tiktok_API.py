@@ -5,7 +5,7 @@ from datetime import datetime
 ruta_proyecto = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 carpeta_videos = os.path.join(ruta_proyecto, "videos")
 
-# url = "https://vt.tiktok.com/ZSpFBK5pd/"
+# url = "https://vt.tiktok.com/ZSpC6A2oJ/"
 
 def generar_nombre_video(custom_name=None):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -18,6 +18,7 @@ def descargar_post_tiktok(url):
     nombre_video = generar_nombre_video()
 
     ydl_opts = {
+        'verbose': True, 
         'outtmpl': os.path.join(carpeta_videos, nombre_video),
         'format': 'best',
         'noplaylist': True,

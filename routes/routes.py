@@ -504,7 +504,7 @@ async def webhook(request: Request):
                     }
                 else:
                     return {"status": "error", "message": "No se pudo obtener los medios del mensaje."}    
-            elif (tipo_mensaje == "ptt" or tipo_mensaje == "audio" or tipo_mensaje == "voice"):
+            elif (tipo_mensaje == "ptt" or tipo_mensaje == "voice"):
                 media = data.get("media", None)
                 if media is not None:
                     print("Procesando mensaje de voz...", id_mensaje)

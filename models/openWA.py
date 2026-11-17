@@ -18,22 +18,37 @@ def construir_mapa_menciones(miembros):
     y de todas formas resuelve al lid correcto.
     """
     alias_map = []
+    miembros_validos = []
+    cantidad_por_primer_nombre = {}
+
+    # Primero contamos los primeros nombres.
     for m in miembros:
         lid_raw = (m.get("lid") or "").lstrip("@")
-        if not lid_raw:
-            continue
- 
         nombre = (m.get("name") or m.get("pushName") or "").strip()
-        if not nombre:
+        if not lid_raw or not nombre:
             continue
- 
+
         primer_nombre = nombre.split()[0]
- 
-        for alias in {nombre, primer_nombre}:
-            if alias.lower() in ALIAS_RESERVADOS:
-                continue
-            alias_map.append((alias, lid_raw))
- 
+        clave = primer_nombre.casefold()
+        cantidad_por_primer_nombre[clave] = (
+            cantidad_por_primer_nombre.get(clave, 0) + 1
+        )
+        miembros_validos.append((nombre, primer_nombre, lid_raw))
+
+    # Luego agregamos siempre el nombre completo y, si no es ambiguo, el primero.
+    for nombre, primer_nombre, lid_raw in miembros_validos:
+        aliases = [nombre]
+
+        if (
+            cantidad_por_primer_nombre[primer_nombre.casefold()] == 1
+            and primer_nombre.casefold() != nombre.casefold()
+        ):
+            aliases.append(primer_nombre)
+
+        for alias in aliases:
+            if alias.casefold() not in ALIAS_RESERVADOS:
+                alias_map.append((alias, lid_raw))
+
     alias_map.sort(key=lambda par: len(par[0]), reverse=True)
     return alias_map
 
@@ -51,7 +66,7 @@ def reemplazar_menciones(texto: str, miembros):
     mentions = []
  
     for alias, lid in alias_map:
-        patron = re.compile(rf'@{re.escape(alias)}\b', re.IGNORECASE)
+        patron = re.compile(rf'@{re.escape(alias)}(?!\w)', re.IGNORECASE)
         if patron.search(texto):
             texto = patron.sub(f'@{lid}', texto)
             jid = f"{lid}@lid"
