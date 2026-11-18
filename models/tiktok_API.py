@@ -25,10 +25,7 @@ def descargar_post_tiktok(url):
         'quiet': False,
         'progress_hooks': [lambda d: print(f"Progress: {d}")],
         'cookiesfrombrowser': ('chrome',),  # Use Chrome cookies for authentication
-        'extractor_args': {'tiktok': {'webpage_download': True}},
-        'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
+        'extractor_args': {'tiktok': {'webpage_download': True}}
     }
 
     try:
