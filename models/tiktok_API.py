@@ -1,11 +1,14 @@
 import yt_dlp
+from yt_dlp.networking.impersonate import ImpersonateTarget
 import os
 from datetime import datetime
+import time
+import subprocess
 
 ruta_proyecto = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 carpeta_videos = os.path.join(ruta_proyecto, "videos")
 
-# url = "https://vt.tiktok.com/ZSpC6A2oJ/"
+url = "https://vt.tiktok.com/ZSpC6A2oJ/"
 
 def generar_nombre_video(custom_name=None):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -13,29 +16,48 @@ def generar_nombre_video(custom_name=None):
         return f"{custom_name}_{timestamp}.mp4"
     return f"tiktok_{timestamp}.mp4"
 
-def descargar_post_tiktok(url):
+def descargar_post_tiktok(url, intentos=3):
 
     nombre_video = generar_nombre_video()
 
     ydl_opts = {
-        'verbose': True, 
+        'verbose': True,
         'outtmpl': os.path.join(carpeta_videos, nombre_video),
-        'format': 'best',
         'noplaylist': True,
-        'quiet': False,
-        'progress_hooks': [lambda d: print(f"Progress: {d}")],
-        'cookiesfrombrowser': ('chrome',),  # Use Chrome cookies for authentication
-        'extractor_args': {'tiktok': {'webpage_download': True}}
+        'cookiesfrombrowser': ('chrome',),
+        'impersonate': ImpersonateTarget.from_str('chrome'),
     }
 
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-            print(f"\nVideo descargado exitosamente: {os.path.join(carpeta_videos, nombre_video)}")
-            return os.path.join(carpeta_videos, nombre_video)
-    except yt_dlp.utils.DownloadError as e:
-        print(f"Error al descargar el video: {str(e)}")
-    except Exception as e:
-        print(f"Error al descargar el video: {e}")
+    for i in range(1, intentos + 1):
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([url])
+                print(f"\nVideo descargado exitosamente: {os.path.join(carpeta_videos, nombre_video)}")
+                return os.path.join(carpeta_videos, nombre_video)
+        except yt_dlp.utils.DownloadError as e:
+            print(f"Intento {i}/{intentos} falló: {e}")
+            if i < intentos:
+                print(f"Reintentando en {3 * i} segundos...")
+                ydl_opts['cookiesfrombrowser'] = None
+                time.sleep(3 * i)
+            if i == intentos:
+                cmd = [
+                    "yt-dlp", "--no-playlist",
+                    "--verbose",
+                    "--cookies-from-browser", "chrome",
+                    "-o", os.path.join(carpeta_videos, nombre_video),
+                    url,
+                ]
+                r = subprocess.run(cmd, capture_output=True, text=True)
+                if r.returncode != 0:
+                    print(r.stderr)
+                    print(f"Error al descargar el video desde yt-dlp: {str(e)}")
+                    return None
+                else:
+                    print(f"Video descargado exitosamente con yt-dlp: {os.path.join(carpeta_videos, nombre_video)}")
+                    return os.path.join(carpeta_videos, nombre_video)
+        except Exception as e:
+            print(f"Error al descargar el video: {e}")
+    return None
 
-# descargar_post_tiktok(url)
+descargar_post_tiktok(url)

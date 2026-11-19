@@ -68,7 +68,7 @@ async def lifespan(app: FastAPI):
     else:
         if len(lista_participantes) > 0 and sesion_realizada == "ready":
             await enviar_mensaje(settings.DEFAULT_GROUP.split(",")[0], settings.PREFIJO_MENSAJE + " " + respuesta["response"])
-            pass
+            #pass
         else:
             print("No se pudo enviar el mensaje. Verifica que la sesión esté activa.")
         # El yield marca la transición entre startup y shutdown
