@@ -8,7 +8,7 @@ import subprocess
 ruta_proyecto = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 carpeta_videos = os.path.join(ruta_proyecto, "videos")
 
-url = "https://www.tiktok.com/@irisrodriguezof/video/7706745668261416244?q=%E2%80%8F%20iris%20rodriguez&t=1795050313498"
+# url = "https://www.tiktok.com/@irisrodriguezof/video/7706745668261416244?q=%E2%80%8F%20iris%20rodriguez&t=1795050313498"
 
 def generar_nombre_video(custom_name=None):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -63,4 +63,4 @@ def descargar_post_tiktok(url, intentos=3):
             print(f"Error al descargar el video: {e}")
     return None
 
-descargar_post_tiktok(url)
+# descargar_post_tiktok(url)
