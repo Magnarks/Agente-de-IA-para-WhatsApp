@@ -8,7 +8,7 @@ import subprocess
 ruta_proyecto = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 carpeta_videos = os.path.join(ruta_proyecto, "videos")
 
-url = "https://vt.tiktok.com/ZSpC6A2oJ/"
+url = "https://www.tiktok.com/@irisrodriguezof/video/7706745668261416244?q=%E2%80%8F%20iris%20rodriguez&t=1795050313498"
 
 def generar_nombre_video(custom_name=None):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -26,6 +26,9 @@ def descargar_post_tiktok(url, intentos=3):
         'noplaylist': True,
         'cookiesfrombrowser': ('chrome',),
         'impersonate': ImpersonateTarget.from_str('chrome'),
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.8103.50 Safari/537.36'
+        }
     }
 
     for i in range(1, intentos + 1):
