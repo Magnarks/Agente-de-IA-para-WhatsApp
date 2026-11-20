@@ -16,6 +16,7 @@ from models.generador_memes import generar_meme_bytes
 from models.youtube_API import buscar_video, descargar_audio, descargar_video
 from models.instagram_API import descargar_post_instagram
 from models.tiktok_API import descargar_post_tiktok
+from models.twitter_API import descargar_post_twitter
 import whisper
 import tempfile
 from datetime import datetime
@@ -679,9 +680,19 @@ async def descargar_post_tiktok_IA(url: str):
     if not url or not url.strip():
         return "No se proporcionó una URL"
 
-    ruta_archivo = descargar_post_tiktok(url)
-    if ruta_archivo:
-        return {"response": "tiktok descargado", "archivo_file": ruta_archivo}
+    resultado = descargar_post_tiktok(url)
+    if resultado:
+        return {"response": "tiktok descargado", "archivo_file": resultado["archivo_file"], "caption": resultado["caption"]}
+    return {"response": "error al descargar el post"}
+
+async def descargar_post_twitter_IA(url: str):
+
+    if not url or not url.strip():
+        return "No se proporcionó una URL"
+
+    resultado = await descargar_post_twitter(url)
+    if resultado:
+        return {"response": "twitter descargado", "archivo_file": resultado["archivo_file"], "caption": resultado["caption"]}
     return {"response": "error al descargar el post"}
 
 def consultar_resultado_deportivo_IA(partido: str):
@@ -1290,6 +1301,23 @@ herramientas = [
                 "required": ["url"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "descargar_post_twitter_IA",
+            "description": "Descarga un post de Twitter dado su URL y devuelve la ruta del archivo descargado para su posterior envio. Usala cuando alguien mencione que quiere descargar un post o video de Twitter.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "La URL del post de Twitter a descargar."
+                    }
+                },
+                "required": ["url"]
+            }
+        }
     }
 ]
 
@@ -1479,6 +1507,23 @@ async def ejecutar_tool(tool_name, tool_args, contexto):
             respuesta_media = {
                 "response": "tiktok descargado",
                 "archivo_file": resultado["archivo_file"],
+                "caption": resultado["caption"]
+            }
+            if contexto.get("reaccion_emoji"):
+                respuesta_media["emoji"] = contexto["reaccion_emoji"]
+            return {"status": "descargado"}, respuesta_media
+
+        return resultado, None
+
+    if tool_name == "descargar_post_twitter_IA":
+        url = tool_args.get("url")
+        resultado = await descargar_post_twitter_IA(url)
+
+        if isinstance(resultado, dict) and resultado.get("response") == "twitter descargado":
+            respuesta_media = {
+                "response": "twitter descargado",
+                "archivo_file": resultado["archivo_file"],
+                "caption": resultado["caption"]
             }
             if contexto.get("reaccion_emoji"):
                 respuesta_media["emoji"] = contexto["reaccion_emoji"]

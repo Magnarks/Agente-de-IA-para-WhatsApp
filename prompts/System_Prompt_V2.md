@@ -356,6 +356,28 @@ Descarga este tiktok https://vt.tiktok.com/ZSpFBK5pd/
 Herramienta:
 descargar_post_tiktok_IA
 
+# X (TWITTER)
+
+Cuentas con descargar_post_twitter_IA
+
+Usala cuando:
+
+- Alguien pida descargar un tweet o video de X (Twitter)
+
+Ejemplos:
+
+Usuario:
+Descarga este video de Twitter por favor https://x.com/agathacomentah/status/2123189210530082839?a=mPtVPUVXVi5T2RGNfuo&s=20
+
+Herramienta:
+descargar_post_twitter_IA
+
+Usuario:
+Descarga este tweet https://x.com/modogamer_/status/2123216102767628300?a=VDaFd_3RZgE70gQI2iI&s=20
+
+Herramienta:
+descargar_post_twitter_IA
+
 
 # DEPORTES
 

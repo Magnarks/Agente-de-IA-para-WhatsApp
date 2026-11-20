@@ -146,7 +146,7 @@ async def webhook(request: Request):
                     extension_archivo = os.path.splitext(respuesta['archivo_file'])[1]
                     if extension_archivo.lower() in (".jpg", ".jpeg", ".png", ".gif"):
                         archivo_base64, mimetype_detectado = leer_archivo_como_base64(None, respuesta['archivo_file'])
-                        await enviar_mensaje_imagen(chat_id, base64_image=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido de TikTok que pediste")
+                        await enviar_mensaje_imagen(chat_id, base64_image=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido de TikTok que pediste:\n'{respuesta.get('caption', '')}'")
                     else:
                         subprocess.run([
                             "ffmpeg",
@@ -159,7 +159,25 @@ async def webhook(request: Request):
                             os.path.splitext(respuesta['archivo_file'])[0] + "_converted.mp4"
                         ], check=True, capture_output=True)
                         archivo_base64, mimetype_detectado = leer_archivo_como_base64(None, os.path.splitext(respuesta['archivo_file'])[0] + "_converted.mp4")
-                        await enviar_mensaje_video(chat_id, base64_video=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido de TikTok que pediste")
+                        await enviar_mensaje_video(chat_id, base64_video=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido de TikTok que pediste:\n'{respuesta.get('caption', '')}'")
+                elif respuesta.get("response") == "twitter descargado" and "archivo_file" in respuesta:
+                    extension_archivo = os.path.splitext(respuesta['archivo_file'])[1]
+                    if extension_archivo.lower() in (".jpg", ".jpeg", ".png", ".gif"):
+                        archivo_base64, mimetype_detectado = leer_archivo_como_base64(None, respuesta['archivo_file'])
+                        await enviar_mensaje_imagen(chat_id, base64_image=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido de X(Twitter) que pediste:\n'{respuesta.get('caption', '')}'")
+                    else:
+                        subprocess.run([
+                            "ffmpeg",
+                            "-y",
+                            "-i", respuesta['archivo_file'],
+                            "-c:v", "libx264",
+                            "-pix_fmt", "yuv420p",
+                            "-c:a", "aac",
+                            "-movflags", "+faststart",
+                            os.path.splitext(respuesta['archivo_file'])[0] + "_converted.mp4"
+                        ], check=True, capture_output=True)
+                        archivo_base64, mimetype_detectado = leer_archivo_como_base64(None, os.path.splitext(respuesta['archivo_file'])[0] + "_converted.mp4")
+                        await enviar_mensaje_video(chat_id, base64_video=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido de X(Twitter) que pediste:\n'{respuesta.get('caption', '')}'")
                 elif respuesta.get("response") == "encuesta generada" and "encuesta" in respuesta and "opciones" in respuesta:
                     encuesta = respuesta["encuesta"]
                     opciones = respuesta["opciones"]
@@ -436,7 +454,7 @@ async def webhook(request: Request):
                     extension_archivo = os.path.splitext(respuesta['archivo_file'])[1]
                     if extension_archivo.lower() in (".jpg", ".jpeg", ".png", ".gif"):
                         archivo_base64, mimetype_detectado = leer_archivo_como_base64(None, respuesta['archivo_file'])
-                        await enviar_mensaje_imagen(chat_id, base64_image=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido de TikTok que pediste")
+                        await enviar_mensaje_imagen(chat_id, base64_image=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido de TikTok que pediste:\n'{respuesta.get('caption', '')}'")
                     else:
                         subprocess.run([
                             "ffmpeg",
@@ -449,7 +467,25 @@ async def webhook(request: Request):
                             os.path.splitext(respuesta['archivo_file'])[0] + "_converted.mp4"
                         ], check=True, capture_output=True)
                         archivo_base64, mimetype_detectado = leer_archivo_como_base64(None, os.path.splitext(respuesta['archivo_file'])[0] + "_converted.mp4")
-                        await enviar_mensaje_video(chat_id, base64_video=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido de TikTok que pediste")
+                        await enviar_mensaje_video(chat_id, base64_video=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido de TikTok que pediste:\n'{respuesta.get('caption', '')}'")
+                elif respuesta.get("response") == "twitter descargado" and "archivo_file" in respuesta:
+                    extension_archivo = os.path.splitext(respuesta['archivo_file'])[1]
+                    if extension_archivo.lower() in (".jpg", ".jpeg", ".png", ".gif"):
+                        archivo_base64, mimetype_detectado = leer_archivo_como_base64(None, respuesta['archivo_file'])
+                        await enviar_mensaje_imagen(chat_id, base64_image=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido de X(Twitter) que pediste:\n'{respuesta.get('caption', '')}'")
+                    else:
+                        subprocess.run([
+                            "ffmpeg",
+                            "-y",
+                            "-i", respuesta['archivo_file'],
+                            "-c:v", "libx264",
+                            "-pix_fmt", "yuv420p",
+                            "-c:a", "aac",
+                            "-movflags", "+faststart",
+                            os.path.splitext(respuesta['archivo_file'])[0] + "_converted.mp4"
+                        ], check=True, capture_output=True)
+                        archivo_base64, mimetype_detectado = leer_archivo_como_base64(None, os.path.splitext(respuesta['archivo_file'])[0] + "_converted.mp4")
+                        await enviar_mensaje_video(chat_id, base64_video=archivo_base64, mimetype=respuesta.get("mimetype", mimetype_detectado), mensaje=f"{settings.PREFIJO_MENSAJE} Mira aquí está el contenido de X(Twitter) que pediste:\n'{respuesta.get('caption', '')}'")
                 elif respuesta.get("response") == "encuesta generada" and "encuesta" in respuesta and "opciones" in respuesta:
                     encuesta = respuesta["encuesta"]
                     opciones = respuesta["opciones"]
